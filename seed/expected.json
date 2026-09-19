@@ -1,0 +1,227 @@
+{
+  "account_count": 3,
+  "accounts": [
+    "HDFC Bank Savings",
+    "ICICI Amazon Pay Card",
+    "SBI Savings"
+  ],
+  "appraisal_month": "2026-04",
+  "budget_count": 6,
+  "budgets": [
+    {
+      "category_slug": "groceries",
+      "limit_paise": 1249700,
+      "starts_on": "2026-09-01"
+    },
+    {
+      "category_slug": "shopping",
+      "limit_paise": 829500,
+      "starts_on": "2026-09-01"
+    },
+    {
+      "category_slug": "food-delivery",
+      "limit_paise": 754500,
+      "starts_on": "2026-09-01"
+    },
+    {
+      "category_slug": "transport-fuel",
+      "limit_paise": 667300,
+      "starts_on": "2026-09-01"
+    },
+    {
+      "category_slug": "subscriptions",
+      "limit_paise": 487500,
+      "starts_on": "2026-09-01"
+    },
+    {
+      "category_slug": "dining-out",
+      "limit_paise": 343900,
+      "starts_on": "2026-09-01"
+    }
+  ],
+  "category_spike": {
+    "baseline_median_paise": 759600,
+    "category": "shopping",
+    "month": "2026-09",
+    "multiple": 6.38,
+    "observed_paise": 4843300
+  },
+  "committed_monthly_paise": 8201200,
+  "credit_count": 32,
+  "debit_count": 904,
+  "dormant_subscription": "CULTFIT",
+  "duplicate_charge": {
+    "amount_paise": 124900,
+    "dates": [
+      "2026-09-10",
+      "2026-09-12"
+    ],
+    "hours_apart": 40,
+    "merchant": "BIGBASKET"
+  },
+  "duplicate_pair": [
+    "GAANA",
+    "SPOTIFY"
+  ],
+  "emi_count": 2,
+  "emi_total_paise": 3730000,
+  "goal_count": 2,
+  "goals": [
+    {
+      "current_paise": 36000000,
+      "expected_verdict": "ON_TRACK",
+      "monthly_contribution_paise": 2500000,
+      "name": "Emergency Fund",
+      "priority": 0,
+      "target_date": "2027-07-28",
+      "target_paise": 60000000
+    },
+    {
+      "current_paise": 4800000,
+      "expected_verdict": "BEHIND",
+      "monthly_contribution_paise": 1200000,
+      "name": "Japan Trip",
+      "priority": 1,
+      "target_date": "2027-01-29",
+      "target_paise": 35000000
+    }
+  ],
+  "meta": {
+    "as_of": "2026-09-19",
+    "generator_version": "1.0.0",
+    "month_count": 14,
+    "months": [
+      "2025-08",
+      "2025-09",
+      "2025-10",
+      "2025-11",
+      "2025-12",
+      "2026-01",
+      "2026-02",
+      "2026-03",
+      "2026-04",
+      "2026-05",
+      "2026-06",
+      "2026-07",
+      "2026-08",
+      "2026-09"
+    ],
+    "seed": 42
+  },
+  "monthly_expense_paise": {
+    "2025-08": 12759200,
+    "2025-09": 12460500,
+    "2025-10": 12831700,
+    "2025-11": 12771900,
+    "2025-12": 13637600,
+    "2026-01": 13397400,
+    "2026-02": 12381500,
+    "2026-03": 12979400,
+    "2026-04": 12359900,
+    "2026-05": 13627200,
+    "2026-06": 14867400,
+    "2026-07": 13153000,
+    "2026-08": 14471200,
+    "2026-09": 16171000
+  },
+  "monthly_income_paise": {
+    "2025-08": 11800000,
+    "2025-09": 11832400,
+    "2025-10": 11800000,
+    "2025-11": 11800000,
+    "2025-12": 11837200,
+    "2026-01": 11800000,
+    "2026-02": 11800000,
+    "2026-03": 11830800,
+    "2026-04": 14000000,
+    "2026-05": 14000000,
+    "2026-06": 14024200,
+    "2026-07": 14000000,
+    "2026-08": 14000000,
+    "2026-09": 14000000
+  },
+  "monthly_net_paise": {
+    "2025-08": -959200,
+    "2025-09": -628100,
+    "2025-10": -1031700,
+    "2025-11": -971900,
+    "2025-12": -1800400,
+    "2026-01": -1597400,
+    "2026-02": -581500,
+    "2026-03": -1148600,
+    "2026-04": 1640100,
+    "2026-05": 372800,
+    "2026-06": -843200,
+    "2026-07": 847000,
+    "2026-08": -471200,
+    "2026-09": -2171000
+  },
+  "new_large_merchant": {
+    "amount_paise": 4200000,
+    "date": "2026-09-14",
+    "merchant": "CROMA"
+  },
+  "price_hike": {
+    "from_paise": 29900,
+    "merchant": "HOTSTAR",
+    "month": "2026-05",
+    "pct": 0.3344,
+    "to_paise": 39900
+  },
+  "rent_paise": 2800000,
+  "salary_after_appraisal_paise": 13200000,
+  "salary_before_appraisal_paise": 11000000,
+  "subscription_count": 9,
+  "subscription_monthly_total_paise": 461400,
+  "subscriptions": [
+    "NETFLIX",
+    "SPOTIFY",
+    "GAANA",
+    "HOTSTAR",
+    "AUDIBLE",
+    "CULTFIT",
+    "ADOBECC",
+    "ICLOUD",
+    "AMAZONPRIME"
+  ],
+  "top_category_per_month": {
+    "2025-08": "emi-loan-repayment",
+    "2025-09": "emi-loan-repayment",
+    "2025-10": "emi-loan-repayment",
+    "2025-11": "emi-loan-repayment",
+    "2025-12": "emi-loan-repayment",
+    "2026-01": "emi-loan-repayment",
+    "2026-02": "emi-loan-repayment",
+    "2026-03": "emi-loan-repayment",
+    "2026-04": "emi-loan-repayment",
+    "2026-05": "emi-loan-repayment",
+    "2026-06": "emi-loan-repayment",
+    "2026-07": "emi-loan-repayment",
+    "2026-08": "emi-loan-repayment",
+    "2026-09": "shopping"
+  },
+  "top_category_value_paise": {
+    "2025-08": 3730000,
+    "2025-09": 3730000,
+    "2025-10": 3730000,
+    "2025-11": 3730000,
+    "2025-12": 3730000,
+    "2026-01": 3730000,
+    "2026-02": 3730000,
+    "2026-03": 3730000,
+    "2026-04": 3730000,
+    "2026-05": 3730000,
+    "2026-06": 3730000,
+    "2026-07": 3730000,
+    "2026-08": 3730000,
+    "2026-09": 4843300
+  },
+  "total_expense_paise": 187868900,
+  "total_income_paise": 178524600,
+  "transaction_count": 936,
+  "trial_conversion": {
+    "merchant": "AUDIBLE",
+    "paid_paise": 19900,
+    "trial_paise": 100
+  }
+}

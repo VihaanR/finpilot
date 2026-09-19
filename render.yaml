@@ -1,0 +1,37 @@
+# Render blueprint for the FinPilot API (USER.md section 8b).
+# Free tier sleeps after 15 minutes; the keep-alive ping set up at T12 is what
+# stops a judge's first request hitting a ~40-second cold start.
+services:
+  - type: web
+    name: finpilot-api
+    runtime: python
+    plan: free
+    region: singapore
+    rootDir: services/api
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.13"
+      # Values are set in the Render dashboard, never committed here.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: INTERNAL_API_TOKEN
+        sync: false
+      - key: BHASHINI_USER_ID
+        sync: false
+      - key: BHASHINI_API_KEY
+        sync: false

@@ -17,7 +17,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from .recurrence import find_duplicate_pairs, had_price_rise
+from .recurrence import find_duplicate_pairs, had_price_rise, is_trial_conversion
 from .stats import median_int, percentile_int, robust_z
 from .types import (
     Anomaly,
@@ -33,6 +33,14 @@ from .types import (
 SPIKE_Z_THRESHOLD = 3.0
 SPIKE_Z_HIGH = 5.0
 
+#: Statistical significance is not the same as mattering. A category the user
+#: spends on very regularly has a tiny MAD, so a 15% wobble scores z > 5 and
+#: would be reported as a HIGH-severity spike. These gates require the change
+#: to be large enough to be worth a card on the dashboard, and reserve HIGH
+#: for something that genuinely doubled.
+MIN_SPIKE_RELATIVE_CHANGE = 0.30
+SPIKE_HIGH_MULTIPLE = 2.0
+
 #: DESIGN.md section 8.2: category_spike needs >= 3 months of history.
 MIN_MONTHS_FOR_BASELINE = 3
 
@@ -46,6 +54,10 @@ DUPLICATE_WINDOW_HOURS = 72
 LARGE_MERCHANT_PERCENTILE = 90.0
 
 PRICE_HIKE_THRESHOLD = 0.10
+
+#: Below this confidence a "price rise" is ordinary variance in ad-hoc
+#: spending at a merchant, not a mandate whose amount changed.
+PRICE_HIKE_MIN_CONFIDENCE = 0.7
 
 
 @dataclass(frozen=True)
@@ -66,6 +78,14 @@ def _month_end(value: date) -> date:
     if first.month == 12:
         return first.replace(year=first.year + 1, month=1) - timedelta(days=1)
     return first.replace(month=first.month + 1) - timedelta(days=1)
+
+
+def _last_complete_month(reference: date) -> date:
+    """First day of the most recent month that has fully elapsed."""
+    month_start = _month_start(reference)
+    if reference >= _month_end(month_start):
+        return month_start
+    return _month_start(month_start - timedelta(days=1))
 
 
 def _format_rupees(paise: int) -> str:
@@ -92,14 +112,29 @@ def _format_rupees(paise: int) -> str:
 
 
 def detect_category_spikes(
-    txns: Sequence[Txn], *, period: date, baseline_months: int = BASELINE_MONTHS
+    txns: Sequence[Txn],
+    *,
+    period: date,
+    baseline_months: int = BASELINE_MONTHS,
+    as_of: date | None = None,
+    allow_partial_month: bool = False,
 ) -> list[Anomaly] | InsufficientHistory:
     """Robust-z spike detection per category for the month containing `period`.
 
     Returns `InsufficientHistory` when fewer than three complete prior months
     of data exist, rather than a baseline drawn from one or two months.
+
+    A month still in progress is not comparable to complete months and is
+    refused unless `allow_partial_month` is set. Pro-rating was tried and is
+    wrong: it works for continuous spending but not for lumpy fixed charges,
+    where a single broadband debit that has already happened reads as a 1.6x
+    spike against a baseline scaled down to two thirds of a month.
     """
     observed_month = _month_start(period)
+    reference = as_of or period
+    month_end = _month_end(observed_month)
+    if reference < month_end and not allow_partial_month:
+        return InsufficientHistory(reason="month_in_progress", months_available=0)
     debits = [t for t in txns if t.direction is Direction.DEBIT]
 
     by_month_category: dict[tuple[date, str], list[Txn]] = defaultdict(list)
@@ -129,12 +164,19 @@ def detect_category_spikes(
         if abs(z) <= SPIKE_Z_THRESHOLD:
             continue
         baseline_median = median_int([int(b) for b in baseline])
-        multiple = observed_total / baseline_median if baseline_median else 0.0
+        if not baseline_median:
+            continue
+        multiple = observed_total / baseline_median
+        if abs(multiple - 1.0) < MIN_SPIKE_RELATIVE_CHANGE:
+            continue
         direction_word = "higher" if z > 0 else "lower"
+        severe = abs(z) > SPIKE_Z_HIGH and (
+            multiple >= SPIKE_HIGH_MULTIPLE or multiple <= 1 / SPIKE_HIGH_MULTIPLE
+        )
         anomalies.append(
             Anomaly(
                 type=AnomalyType.CATEGORY_SPIKE,
-                severity=Severity.HIGH if abs(z) > SPIKE_Z_HIGH else Severity.MEDIUM,
+                severity=Severity.HIGH if severe else Severity.MEDIUM,
                 period_start=observed_month,
                 period_end=_month_end(observed_month),
                 txn_ids=tuple(t.id for t in observed_txns),
@@ -255,11 +297,30 @@ def detect_duplicate_charges(
 
 
 def detect_price_hikes(
-    series: Sequence[RecurringSeries], *, threshold: float = PRICE_HIKE_THRESHOLD
+    series: Sequence[RecurringSeries],
+    *,
+    threshold: float = PRICE_HIKE_THRESHOLD,
+    min_confidence: float = PRICE_HIKE_MIN_CONFIDENCE,
 ) -> list[Anomaly]:
-    """A recurring series whose current price level rose more than 10%."""
+    """A recurring series whose current price level rose more than 10%.
+
+    Three exclusions, none of which DESIGN.md section 8.2 states but all of
+    which it implies by placing this badge on Mandate Radar:
+
+      - credit series, because a salary appraisal is not a price hike
+      - trial-to-paid conversions, which section 10.1 badges separately and
+        which would otherwise report a Rs 1 trial as a 19,800% increase
+      - low-confidence series, where the "rise" is variance in ad-hoc spending
+        rather than a mandate whose amount changed
+    """
     anomalies: list[Anomaly] = []
     for item in series:
+        if item.direction is not Direction.DEBIT:
+            continue
+        if item.confidence < min_confidence:
+            continue
+        if is_trial_conversion(item):
+            continue
         if not had_price_rise(item, threshold=threshold):
             continue
         previous = item.price_history[-2]
@@ -345,6 +406,11 @@ def detect_duplicate_subscriptions(
     anomalies: list[Anomaly] = []
     for a, b in find_duplicate_pairs(series):
         combined = a.median_amount_paise + b.median_amount_paise
+        # Name the service kind when enrichment supplied one ("two music
+        # subscriptions"), otherwise stay generic rather than saying
+        # "two subscriptions subscriptions".
+        kind = a.service_type or b.service_type
+        noun = f"{kind} subscriptions" if kind else "subscriptions"
         anomalies.append(
             Anomaly(
                 type=AnomalyType.DUPLICATE_CHARGE,
@@ -353,7 +419,7 @@ def detect_duplicate_subscriptions(
                 period_end=max(a.last_seen, b.last_seen),
                 txn_ids=tuple(a.txn_ids) + tuple(b.txn_ids),
                 explanation=(
-                    f"Two {a.category_slug} subscriptions are active: "
+                    f"Two {noun} are active: "
                     f"{a.normalized_merchant} ({_format_rupees(a.median_amount_paise)}) "
                     f"and {b.normalized_merchant} "
                     f"({_format_rupees(b.median_amount_paise)}), "
@@ -391,7 +457,11 @@ def detect(
 
     found: list[Anomaly] = []
 
-    spikes = detect_category_spikes(txns, period=reference)
+    # Spike detection runs on the last *complete* month; the month in progress
+    # has no comparable baseline. Point-in-time detectors below still cover the
+    # current month, so today's duplicate charge is not missed.
+    spike_period = _last_complete_month(reference)
+    spikes = detect_category_spikes(txns, period=spike_period, as_of=reference)
     if isinstance(spikes, list):
         found.extend(spikes)
 

@@ -46,6 +46,32 @@ AMOUNT_TOLERANCE_PCT = 5
 #: DESIGN.md section 8.1: accept a cadence when gap_mad / median_gap < 0.25.
 MAX_GAP_DISPERSION = 0.25
 
+#: The MAD test alone is not sufficient. Because the MAD is itself a median,
+#: gaps of [30, 30, 30, 200, 30, 5] yield median 30 and MAD 0 and sail through
+#: it. A genuine mandate fires at *every* interval, so we additionally require
+#: most gaps to sit near the median. Without this, a busy merchant like a food
+#: delivery app produces dozens of phantom "subscriptions" purely by chance.
+MIN_GAP_CONSISTENCY = 0.75
+
+#: Share of a merchant's transactions, within the candidate series' own date
+#: span, that the series must itself account for.
+#:
+#: This is the strongest single guard against phantom series. Netflix charges
+#: Rs 649 and does nothing else, so its series is 100% of Netflix activity. A
+#: food delivery app has hundreds of transactions, and any three of them can
+#: land on near-equal gaps by chance; such a cluster accounts for ~2% of that
+#: merchant's activity and is rejected here. The trade-off, accepted and
+#: documented: a single merchant string carrying *both* a subscription and
+#: ad-hoc purchases will not yield a series. Real normalisation separates
+#: those (different VPA handles), so it does not arise in practice.
+MIN_CLUSTER_DOMINANCE = 0.30
+
+#: A two-occurrence PROBABLE pair has a single gap, so gap consistency is
+#: trivially satisfied. These tighter bounds stop every coincidental pair of
+#: similar charges being surfaced as a candidate subscription.
+PROBABLE_AMOUNT_TOLERANCE_PCT = 2
+PROBABLE_CADENCE_TOLERANCE = 0.15
+
 #: DESIGN.md section 8.1: three occurrences make a series; exactly two with a
 #: tight amount match are surfaced as PROBABLE.
 MIN_OCCURRENCES = 3
@@ -138,12 +164,80 @@ def _gap_stats(txns: Sequence[Txn]) -> tuple[float, float] | None:
     return median_gap, gap_mad
 
 
+def _gap_consistency(txns: Sequence[Txn]) -> float:
+    """Fraction of successive gaps sitting within tolerance of the median gap.
+
+    This is the discriminator between a real mandate and a busy merchant. A
+    subscription fires at every interval, so nearly every gap matches. Random
+    spending at one merchant produces a few matching gaps among many that do
+    not, which the MAD test cannot see.
+    """
+    ordered = sorted(txns, key=lambda t: t.txn_date)
+    gaps = [
+        float((b.txn_date - a.txn_date).days)
+        for a, b in itertools.pairwise(ordered)
+    ]
+    if not gaps:
+        return 0.0
+    median_gap = median_float(gaps)
+    if median_gap <= 0:
+        return 0.0
+    within = sum(
+        1 for g in gaps if abs(g - median_gap) <= MAX_GAP_DISPERSION * median_gap
+    )
+    return within / len(gaps)
+
+
 def _is_regular(txns: Sequence[Txn]) -> bool:
     stats = _gap_stats(txns)
     if stats is None:
         return False
     median_gap, gap_mad = stats
-    return (gap_mad / median_gap) < MAX_GAP_DISPERSION
+    if (gap_mad / median_gap) >= MAX_GAP_DISPERSION:
+        return False
+    return _gap_consistency(txns) >= MIN_GAP_CONSISTENCY
+
+
+def _is_dominant(cluster: Sequence[Txn], group: Sequence[Txn]) -> bool:
+    """Does this cluster account for enough of the merchant's own activity?
+
+    Measured only across the cluster's date span, so a subscription that
+    started midway through the history is judged against the period it
+    actually covers rather than the whole ledger.
+    """
+    first = min(t.txn_date for t in cluster)
+    last = max(t.txn_date for t in cluster)
+    in_span = [t for t in group if first <= t.txn_date <= last]
+    if not in_span:
+        return False
+    return (len(cluster) / len(in_span)) >= MIN_CLUSTER_DOMINANCE
+
+
+def _is_probable_pair(txns: Sequence[Txn]) -> bool:
+    """Is a two-occurrence cluster a tight enough match to surface?
+
+    DESIGN.md section 8.1 admits "clusters with exactly 2 occurrences and tight
+    amount match". Tight is made explicit here: near-identical amounts, and a
+    gap close to one of the canonical cadences rather than any arbitrary
+    interval.
+    """
+    if len(txns) != PROBABLE_OCCURRENCES:
+        return False
+    first, second = sorted(txns, key=lambda t: t.txn_date)
+
+    centre = median_int([t.amount_paise for t in txns])
+    tight = max(
+        MIN_AMOUNT_TOLERANCE_PAISE,
+        (abs(centre) * PROBABLE_AMOUNT_TOLERANCE_PCT) // 100,
+    )
+    if abs(first.amount_paise - second.amount_paise) > tight:
+        return False
+
+    gap = (second.txn_date - first.txn_date).days
+    if gap <= 0:
+        return False
+    cadence_days = CADENCE_DAYS[nearest_cadence(float(gap))]
+    return abs(gap - cadence_days) <= PROBABLE_CADENCE_TOLERANCE * cadence_days
 
 
 def _is_price_change(a: Sequence[Txn], b: Sequence[Txn]) -> bool:
@@ -307,6 +401,7 @@ def _build_series(
         mandate_channel=infer_mandate_channel([t.raw_narration for t in ordered]),
         afa_band=derive_afa_band(median_amount, category_slug),
         status=status,
+        service_type=ordered[-1].service_type,
         txn_ids=tuple(t.id for t in ordered),
         price_history=tuple(levels),
         key=series_key(ordered[0].normalized_merchant, direction, first_seen),
@@ -349,11 +444,17 @@ def detect(
             continue
         clusters = _merge_price_changes(_cluster_by_amount(group))
         for cluster in clusters:
+            if not _is_dominant(cluster, group):
+                continue
             if len(cluster) >= MIN_OCCURRENCES:
                 if not _is_regular(cluster):
                     continue
                 series = _build_series(cluster, as_of=reference)
-            elif include_probable and len(cluster) == PROBABLE_OCCURRENCES:
+            elif (
+                include_probable
+                and len(cluster) == PROBABLE_OCCURRENCES
+                and _is_probable_pair(cluster)
+            ):
                 series = _build_series(
                     cluster, as_of=reference, status_override=SeriesStatus.PROBABLE
                 )
@@ -366,27 +467,45 @@ def detect(
     return results
 
 
+#: Categories where two concurrent series genuinely means paying twice for the
+#: same thing. Deliberately narrow: two EMIs or two insurance premiums are
+#: normal and must never be badged DUPLICATE.
+DUPLICATE_CANDIDATE_CATEGORIES = frozenset(
+    {"subscriptions", "entertainment", "fitness"}
+)
+
+
 def find_duplicate_pairs(
-    series: Sequence[RecurringSeries], *, amount_ratio: float = 2.0
+    series: Sequence[RecurringSeries],
+    *,
+    amount_ratio: float = 2.0,
+    categories: frozenset[str] = DUPLICATE_CANDIDATE_CATEGORIES,
 ) -> list[tuple[RecurringSeries, RecurringSeries]]:
     """Active series in the same category with comparable amounts.
 
     Powers the DUPLICATE badge in DESIGN.md section 10.1 (two music services,
     in the seeded demo). Amounts are "similar" when neither is more than
-    `amount_ratio` times the other.
+    `amount_ratio` times the other. Only categories where paying twice is
+    actually redundant are considered.
     """
     active = [
         s
         for s in series
         if s.status in (SeriesStatus.ACTIVE, SeriesStatus.PROBABLE)
         and s.direction is Direction.DEBIT
-        and s.category_slug
+        and s.category_slug in categories
     ]
     pairs: list[tuple[RecurringSeries, RecurringSeries]] = []
     for a, b in itertools.combinations(active, 2):
-        if a.category_slug != b.category_slug:
-            continue
         if a.normalized_merchant == b.normalized_merchant:
+            continue
+        # Prefer service_type when enrichment has supplied it: two music
+        # services are a duplicate, Adobe CC and a gym membership are not,
+        # even though all three sit in the `subscriptions` category.
+        if a.service_type and b.service_type:
+            if a.service_type != b.service_type:
+                continue
+        elif a.category_slug != b.category_slug:
             continue
         lo, hi = sorted((a.median_amount_paise, b.median_amount_paise))
         if lo > 0 and hi / lo <= amount_ratio:

@@ -15,6 +15,10 @@ from app.engine.types import AnomalyType, Severity, rupees
 from .conftest import monthly_run, series, txn
 
 SEPT = date(2026, 9, 15)
+#: Spike detection refuses a month still in progress, so these tests observe
+#: September from a vantage point where it has fully elapsed.
+SEPT_COMPLETE = date(2026, 9, 30)
+OCT = date(2026, 10, 10)
 
 #: Six months of steady shopping, then the month under test.
 _BASELINE = {
@@ -46,7 +50,7 @@ def _shopping_history(september_rupees: int):
 class TestCategorySpike:
     def test_fires_on_a_festival_month_spike(self):
         found = anomaly.detect_category_spikes(
-            _shopping_history(40_000), period=SEPT
+            _shopping_history(40_000), period=SEPT, as_of=SEPT_COMPLETE
         )
         assert isinstance(found, list)
         spikes = [a for a in found if a.type is AnomalyType.CATEGORY_SPIKE]
@@ -56,14 +60,14 @@ class TestCategorySpike:
 
     def test_does_not_fire_on_a_normal_month(self):
         found = anomaly.detect_category_spikes(
-            _shopping_history(5_100), period=SEPT
+            _shopping_history(5_100), period=SEPT, as_of=SEPT_COMPLETE
         )
         assert isinstance(found, list)
         assert [a for a in found if a.type is AnomalyType.CATEGORY_SPIKE] == []
 
     def test_explanation_names_the_figures(self):
         found = anomaly.detect_category_spikes(
-            _shopping_history(40_000), period=SEPT
+            _shopping_history(40_000), period=SEPT, as_of=SEPT_COMPLETE
         )
         text = found[0].explanation
         assert "shopping" in text
@@ -77,10 +81,28 @@ class TestCategorySpike:
             txn(on=date(2026, 9, 12), amount_rupees=40_000, merchant="DMART",
                 category="shopping"),
         ]
-        found = anomaly.detect_category_spikes(rows, period=SEPT)
+        found = anomaly.detect_category_spikes(
+            rows, period=SEPT, as_of=SEPT_COMPLETE
+        )
         assert isinstance(found, InsufficientHistory)
         assert found.reason == "insufficient_history"
         assert found.months_available == 1
+
+    def test_month_in_progress_is_refused(self):
+        """A part-month has no comparable baseline and must say so."""
+        found = anomaly.detect_category_spikes(
+            _shopping_history(40_000), period=SEPT, as_of=date(2026, 9, 12)
+        )
+        assert isinstance(found, InsufficientHistory)
+        assert found.reason == "month_in_progress"
+
+    def test_small_but_significant_change_is_not_a_spike(self):
+        """Effect size gates significance: a 15% wobble is not a spike."""
+        found = anomaly.detect_category_spikes(
+            _shopping_history(5_800), period=SEPT, as_of=SEPT_COMPLETE
+        )
+        assert isinstance(found, list)
+        assert [a for a in found if a.type is AnomalyType.CATEGORY_SPIKE] == []
 
 
 class TestNewLargeMerchant:
@@ -249,7 +271,7 @@ class TestOrchestration:
                     next_expected=date(2026, 9, 20),
                 )
             ],
-            period=SEPT,
+            period=OCT,
         )
         types = {a.type for a in found}
         assert AnomalyType.CATEGORY_SPIKE in types
@@ -284,10 +306,10 @@ class TestOrchestration:
                 start=date(2026, 1, 8), count=20, amount_rupees=500,
                 merchant="KIRANA", category="groceries", step_days=12,
             )
-            + [txn(on=date(2026, 9, 9), amount_rupees=42_000, merchant="CROMA",
+            + [txn(on=date(2026, 10, 9), amount_rupees=42_000, merchant="CROMA",
                    category="shopping")]
         )
-        found = anomaly.detect(rows, detected, period=SEPT)
+        found = anomaly.detect(rows, detected, period=OCT)
         types = {a.type for a in found}
         assert types == {
             AnomalyType.CATEGORY_SPIKE,

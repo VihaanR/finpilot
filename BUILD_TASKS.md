@@ -188,8 +188,25 @@ Implement DESIGN.md §8 in `services/api/app/engine/`. **Pure functions, no data
 
 **Acceptance criteria**
 - `pytest services/api/tests/ -v` — all pass, ≥ 25 tests
-- Engine detects **exactly 9** recurring series in the seed data, with the planted duplicate pair and the price-hiked item both correctly flagged
+- Engine detects **exactly 9 subscription series** in the seed data, with the planted duplicate pair and the price-hiked item both correctly flagged
 - All five anomaly types fire on the seed data
+
+> **Corrected 19 Sep 2026.** This criterion originally read "exactly 9 recurring
+> series". That conflicts with T03, which requires the seed to contain a salary
+> credit, rent by NACH, two EMIs and seasonally-varying utilities *in addition*
+> to the 9 subscriptions — all of which are recurring series by any correct
+> detector, and the salary one is required by DESIGN.md §8.3 for Safe-to-Spend.
+> The "9" is the subscription count.
+>
+> Measured against `seed/generate.py --seed 42 --as-of 2026-09-19`, the engine
+> detects **34 series in total: 23 ACTIVE, 4 PROBABLE, 7 LAPSED**, of which
+> **9 are subscriptions** (8 ACTIVE plus the annual Amazon Prime as PROBABLE,
+> since 14 months of history contains only two occurrences of it).
+> Anomaly totals on the same dataset: **19 `silent_mandate`, 3 `category_spike`,
+> 3 `duplicate_charge`, 1 `price_hike`, 1 `new_large_merchant`.** The
+> `silent_mandate` count is one per unacknowledged silent series and is an
+> inventory rather than an alert list, which is the point of Mandate Radar.
+> All of these are asserted in `services/api/tests/test_seed.py`.
 - No engine function imports `anthropic`, `supabase` or any database module
 - Every money value in every return type is an `int`
 
@@ -289,7 +306,7 @@ Three routes, all patterns already established in T08.
 **`/vault`** — AI disclosure log showing redaction; storage inventory with days-to-deletion; consent artefact display; working **Erase everything** (typed confirmation) and **Export everything** (JSON download); revoke consent disabling AI while the deterministic engine keeps working.
 
 **Acceptance criteria**
-- Radar shows all 9 seeded series with correct badges; the price-hiked item shows the correct percentage; the duplicate pair is flagged
+- Radar shows all 9 seeded **subscriptions** with correct badges, alongside the other active obligations (rent, both EMIs, the SIP and the fixed utilities — 23 ACTIVE series in total; see the T06 correction note); the price-hiked item shows the correct percentage; the duplicate pair is flagged
 - Acknowledging an item clears its `silent_mandate` anomaly
 - Simulator: cancelling the three seeded subscriptions moves the goal ETA by the number of months `engine/simulate` computes
 - Vault erase actually deletes (verify the tables are empty afterwards); export produces valid JSON containing transactions, goals, budgets and consent history

@@ -152,6 +152,12 @@ class Txn:
     category_slug: str = UNCATEGORISED_SLUG
     channel: Channel = Channel.OTHER
     account_id: str | None = None
+    #: What kind of service this merchant provides ("music", "video",
+    #: "fitness"). Supplied by the merchant dictionary during enrichment, not
+    #: by the statement. Two active subscriptions sharing a service_type are
+    #: genuinely redundant; two sharing only the `subscriptions` category are
+    #: not. Optional, so the engine works before enrichment has run.
+    service_type: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.amount_paise, int) or isinstance(self.amount_paise, bool):
@@ -210,6 +216,7 @@ class RecurringSeries:
     txn_ids: tuple[str, ...]
     price_history: tuple[PricePoint, ...] = ()
     acknowledged: bool = False
+    service_type: str | None = None
     #: Stable identity so the UI, simulator and anomaly layer can refer to a
     #: series without a database round-trip.
     key: str = ""
