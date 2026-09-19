@@ -10,10 +10,10 @@ switched the runtime LLM provider from Anthropic to Google Gemini (free tier).
 ## Verified state
 
 Every line below was run and observed in this session, from the repo root,
-against commit `1899d7f`.
+against commit `7772813`.
 
 - `pytest services/api/tests/` → **200 passed** in 0.32s.
-- `git log --oneline` → 3 commits (`1899d7f`, `5ced4f8`, `c5a8fed`);
+- `git log --oneline` → 4 commits (`7772813`, `1899d7f`, `5ced4f8`, `c5a8fed`);
   `git status --short` → empty, working tree clean, pushed to `origin/main`.
 - `GET /health` on a live uvicorn → `{"status":"ok"}`, HTTP 200.
 - `cd apps/web && npm run build` → exit 0, 5 static pages, no type errors.
@@ -22,8 +22,8 @@ against commit `1899d7f`.
 - Float-in-money scan over `supabase/migrations/*.sql` → 6 matches, all
   non-money: `parser_confidence`, `category_confidence`, `median_gap_days`,
   `gap_mad`, `confidence`, plus one comment line.
-- Engine purity → **0** files under `app/engine/` import `anthropic`,
-  `supabase`, `sqlalchemy` or `psycopg`.
+- Engine purity → **0** files under `app/engine/` import `google.genai`,
+  `anthropic`, `supabase`, `sqlalchemy` or `psycopg`.
 - `seed/generate.py --seed 42 --as-of 2026-09-19` run twice → identical md5 for
   all five outputs. **936 transactions**, 3 accounts, 14 months, and
   `seed/expected.json` holding 34 ground-truth values.
@@ -114,7 +114,7 @@ against commit `1899d7f`.
 **Code blockers:** none. T04 is fully startable — its critical criterion
 (uploading the same file twice produces zero new rows) is verifiable offline
 against the generated seed CSVs, and only the `llm_fallback` adapter needs the
-Anthropic key.
+Gemini key.
 
 **Tooling note:** the `agy` delegation path produced zero files on its one
 dispatch (5-minute print timeout). Dropped after one attempt per the
