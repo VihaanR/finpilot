@@ -116,8 +116,8 @@ This constraint is also a *scoring asset*: it demonstrates problem understanding
                       └───────────┬─────────────────┬────────────────┘
                                   │                 │
                     ┌─────────────▼──────┐   ┌──────▼─────────────┐
-                    │ Supabase Postgres  │   │ Anthropic API      │
-                    │ + pgvector         │   │ sonnet-5 / opus-5  │
+                    │ Supabase Postgres  │   │ Gemini API         │
+                    │ + pgvector         │   │ 3.8-flash / 2.5-pro│
                     │ + Storage + Auth   │   └────────────────────┘
                     └────────────────────┘
 ```
@@ -259,7 +259,10 @@ chat_messages         id, thread_id, role, content, tool_calls JSONB,
                       created_at
 
 -- RAG over bills/receipts ---------------------------------------------------
-document_chunks       id, document_id, user_id, chunk_text, embedding VECTOR(1024)
+document_chunks       id, document_id, user_id, chunk_text, embedding VECTOR(768)
+                      -- gemini-embedding-2 emits 3072 dims natively and
+                      -- truncates cleanly via MRL; 768 is a Google-recommended
+                      -- size and the cheapest to index.
 ```
 
 ### 5.3 Category taxonomy
@@ -470,12 +473,33 @@ This is what powers both the What-If Simulator UI (§10.4) and the Budget Guard 
 
 ### 9.1 Model routing
 
+All runtime inference is **Google Gemini**, on the Gemini Developer API
+(AI Studio key). The routing below keeps one model per job rather than one
+model for everything, because the jobs have genuinely different shapes.
+
 | Use | Model | Why |
 |---|---|---|
-| Interactive chat loop | `claude-sonnet-5` | Latency matters when a judge is typing |
-| Monthly summary generation | `claude-opus-5` | Runs async; quality over speed |
-| Batch categorisation | `claude-haiku-4-5-20251001` | High volume, narrow structured task |
-| Receipt/bill extraction | `claude-sonnet-5` (vision) | Structured extraction from images |
+| Interactive chat loop | `gemini-3.8-flash` | Latency matters when a judge is typing |
+| Monthly summary generation | `gemini-2.5-pro` | Runs async; quality over speed |
+| Batch categorisation | `gemini-3.5-flash-lite` | High volume, narrow structured task |
+| Receipt/bill extraction | `gemini-3.5-flash-lite` (vision) | Structured extraction from images |
+| Document embeddings | `gemini-embedding-2` | 768-dim output for pgvector search |
+
+All five are available on the Gemini API **free tier**, which is what the
+project runs on. Two consequences worth stating plainly:
+
+- **Free-tier quotas are per Cloud project and are not raised by a consumer
+  Google AI Plus / Pro / Ultra subscription.** Those cover the Gemini app, not
+  the API. Moving to Tier 1 requires enabling billing on the project.
+- The quota therefore shapes §7's design rather than being a footnote to it.
+  Tier-1 rules classify ~75% of transactions for free, and tier-2 results are
+  cached by `sha256(normalized_narration)`, so each *unique narration shape*
+  costs exactly one call for the lifetime of the deployment. Bulk-classifying
+  the entire 14-month seed is roughly 19 calls.
+
+The architecture is provider-agnostic by construction: the model selects tools
+and writes prose, the engine computes every number. Swapping providers changes
+`agent/loop.py` and the model IDs, and nothing about what the product asserts.
 
 ### 9.2 Tools
 
@@ -553,7 +577,7 @@ Three consequences, all of which are worth saying out loud in the demo:
 
 ### 9.6 Monthly summary generation
 
-Runs on `claude-opus-5` with all engine outputs for the month pre-computed and supplied as structured input. Produces:
+Runs on `gemini-2.5-pro` with all engine outputs for the month pre-computed and supplied as structured input. Produces:
 
 - **Headline**: income, expense, net, savings rate
 - **Top movements**: three largest category changes vs the previous month, with figures
@@ -608,7 +632,7 @@ Rendered in the UI, sent via Telegram, and available as a Bhashini-translated ve
 | Purpose | Personal finance analysis and insight generation |
 | Data types | Transaction records, account metadata, uploaded bills |
 | Processing | Categorisation, recurrence detection, anomaly detection, AI-generated summaries |
-| Third parties | Anthropic (AI processing, redacted), Supabase (storage, India region where available) |
+| Third parties | Google (Gemini API, AI processing, redacted), Supabase (storage, India region where available) |
 | Retention | 90 days from upload, then automatic deletion |
 | Frequency | On demand, per your action |
 | Revocation | Any time, from Data Vault — takes effect immediately |

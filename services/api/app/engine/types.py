@@ -1,7 +1,7 @@
 """Shared value types for the analytics engine.
 
 DESIGN.md section 8: the engine is pure. Nothing in this package imports
-`anthropic`, `supabase`, SQLAlchemy or any database module. Callers adapt
+`google.genai`, `supabase`, SQLAlchemy or any database module. Callers adapt
 persisted rows into these frozen dataclasses and adapt the results back.
 
 DESIGN.md section 5.1, invariant 1: money is BIGINT paise everywhere. Every

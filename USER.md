@@ -10,7 +10,7 @@ Everything in this file requires a human. The coding agents cannot create accoun
 
 | # | Action | Blocks | Time | Do before |
 |---|---|---|---|---|
-| 1 | Anthropic API key | T05, T07 — everything AI | 5 min | **Hour 0** |
+| 1 | Gemini API key (free) | T05, T07 — everything AI | 3 min | **Hour 0** |
 | 2 | Supabase project | T02 — everything | 10 min | **Hour 0** |
 | 3 | GitHub repo | commits | 2 min | **Hour 0** |
 | 4 | Telegram bot token | T14 | 3 min | Hour 13 |
@@ -23,16 +23,35 @@ Items 1–3 are hard blockers. Do them before you start anything else. Items 4�
 
 ---
 
-## 1. Anthropic API key — Hour 0
+## 1. Gemini API key — Hour 0
 
-1. Go to `console.anthropic.com` → sign in
-2. **Settings → API Keys → Create Key**, name it `finpilot`
-3. Copy it immediately — it is shown once
-4. **Billing → add credits.** A $10–20 balance is ample for this build. An empty balance produces confusing 400-level errors mid-build, which is a miserable thing to debug at hour 7.
+1. Go to `aistudio.google.com/apikey` → sign in with your Google account
+2. **Create API key** → pick or create a Cloud project → copy it
+3. No card and no billing setup required. The free tier covers this build.
 
-→ `ANTHROPIC_API_KEY=sk-ant-...`
+→ `GEMINI_API_KEY=AIza...`
 
-**Check your rate limits** under Settings → Limits. If you're on the lowest tier, tell the agent at T05 to drop tier-2 categorisation to on-demand instead of bulk-on-ingest (this contingency is already in BUILD_TASKS.md).
+### The one thing to be clear about
+
+**A consumer Google AI Plus / Pro / Ultra subscription does not raise your API
+rate limits.** Those plans cover the Gemini *app* at `gemini.google.com`. The
+API has its own quota, applied **per Cloud project**, and the only documented
+way to lift it is enabling billing on that project to reach Tier 1. If you hold
+a Plus plan, you are still on the API free tier here.
+
+That is fine — the build is designed for it:
+
+- Tier-1 deterministic rules classify ~75% of transactions with **zero** API calls
+- Tier-2 results are cached by `sha256(normalized_narration)`, so each unique
+  narration shape costs exactly **one** call for the life of the deployment
+- Classifying the entire 14-month seed dataset is roughly **19 calls**
+
+Free-tier limits are around **10 requests/minute** and a few hundred per day,
+varying by model. Check yours at `aistudio.google.com/rate-limit`.
+
+**If you do hit the limit**, the contingency is already in BUILD_TASKS.md: drop
+tier-2 categorisation to on-demand instead of bulk-on-ingest. Tier 1 alone
+still covers the large majority, so the product degrades rather than breaks.
 
 ---
 
@@ -82,7 +101,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000        # → Render URL at T12
 ### `services/api/.env`
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-...
+GEMINI_API_KEY=AIza...
 SUPABASE_URL=https://xxxxx.supabase.co
 SUPABASE_SERVICE_KEY=eyJ...                      # service_role — server only
 SUPABASE_ANON_KEY=eyJ...
@@ -290,7 +309,7 @@ The form says: *"Remember to disable them after evaluation."*
 
 Once results are announced:
 1. Supabase → **Authentication → Users** → delete or disable `demo@finpilot.in`
-2. Rotate `ANTHROPIC_API_KEY` if the repo is public and anything leaked
+2. Rotate `GEMINI_API_KEY` at `aistudio.google.com/apikey` if the repo is public and anything leaked
 3. Delete the cron-job.org keep-alive so Render stops burning free hours
 
 ---
@@ -325,7 +344,8 @@ The two moments where your attention is worth most: **hour 5–7** (engine corre
 | CORS errors after deploy | Vercel URL missing from `ALLOWED_ORIGINS` | §8d |
 | Auth redirect loop | Vercel URL missing from Supabase URL config | §8d |
 | Extension does nothing | Not logged into the web app in that browser | Log in; the app writes the snapshot |
-| Anthropic 400s mid-build | Credit balance empty | §1, step 4 |
+| Gemini 429s mid-build | Free-tier rate limit (~10 RPM) | Wait a minute, or switch tier-2 to on-demand (§1) |
+| Expected Plus plan to lift API limits | Consumer subscriptions do not apply to the API | §1 — enable project billing for Tier 1, or stay on free |
 | n8n workflows silently no-op | Credential names don't match exactly | §6, step 2–3 |
 | Money figures slightly off | A float crept into a currency path | `grep` for float in engine; paise are integers (DESIGN.md §5.1) |
 
@@ -333,7 +353,7 @@ The two moments where your attention is worth most: **hour 5–7** (engine corre
 
 ## 15. One-page checklist
 
-**Hour 0** — [ ] Anthropic key + credits · [ ] Supabase project + vector + bucket · [ ] GitHub repo · [ ] LinkedIn post 1
+**Hour 0** — [ ] Gemini API key (free, no card) · [ ] Supabase project + vector + bucket · [ ] GitHub repo · [ ] LinkedIn post 1
 
 **Hour 12.5** — [ ] Migrations pushed · [ ] Render live, `/health` green · [ ] Vercel live · [ ] CORS + auth URLs · [ ] Demo seeded · [ ] Reset button works · [ ] Keep-alive running · [ ] **Verified in incognito**
 

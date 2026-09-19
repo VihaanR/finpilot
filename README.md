@@ -80,7 +80,8 @@ n8n/                 Telegram workflows                              [P1]
 
 ## Running locally
 
-Prerequisites: Node 20+, Python 3.11, a Supabase project, an Anthropic API key.
+Prerequisites: Node 20+, Python 3.11, a Supabase project, and a free Gemini API
+key from Google AI Studio.
 Full setup instructions, including how to obtain each credential, are in
 [USER.md](USER.md).
 

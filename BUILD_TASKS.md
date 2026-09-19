@@ -23,6 +23,11 @@ Read `DESIGN.md` first. All design decisions live there; this file contains none
 | **[H]** | `claude-haiku-4-5-20251001` | Bulk data generation (merchant dictionary entries, fixtures) |
 | **[V]** | Vihaan | Human-only — see USER.md |
 
+> These tags say which model **writes the code** for a task. They are unrelated
+> to what the product calls at runtime, which is **Google Gemini** throughout
+> (DESIGN.md §9.1). Build-time routing uses a Claude Code subscription; the
+> product itself needs no Anthropic key.
+
 ---
 
 ## The schedule
@@ -61,7 +66,7 @@ If you are behind schedule at hour 12, you do **not** compress T12. You cut T13 
 Create the structure in DESIGN.md §4.1.
 
 - `apps/web`: Next.js 15, App Router, TypeScript strict, Tailwind, shadcn/ui init, Recharts
-- `services/api`: FastAPI, `uv` or `pip-tools`, `pdfplumber`, `pikepdf`, `pandas`, `numpy`, `anthropic`, `supabase`, `pydantic`, `pytest`
+- `services/api`: FastAPI, `uv` or `pip-tools`, `pdfplumber`, `pikepdf`, `pandas`, `numpy`, `google-genai`, `supabase`, `pydantic`, `pytest`
 - Root: `.gitignore`, `.env.example` for both apps, `README.md`
 - `vercel.json` and `render.yaml` skeletons
 - `git init`, initial commit
@@ -84,7 +89,7 @@ Implement DESIGN.md §5.2 exactly.
 - Every money column is `BIGINT`
 - Indexes: `transactions(user_id, txn_date)`, `transactions(user_id, normalized_merchant)`, `transactions(user_id, category_id)`, `recurring_series(user_id, next_expected_date)`
 - RLS enabled on every user-scoped table, policy `auth.uid() = user_id`
-- `pgvector` extension + `document_chunks.embedding VECTOR(1024)`
+- `pgvector` extension + `document_chunks.embedding VECTOR(768)` (matches `gemini-embedding-2` truncated to 768 dims)
 - Seed the DESIGN.md §5.3 category taxonomy as part of the migration
 - SQLAlchemy models + Pydantic schemas mirroring the tables
 
@@ -131,7 +136,7 @@ Also emit `seed/expected.json` — the ground-truth answers (top category per mo
 Implement DESIGN.md §6.
 
 - `ingest/pdf.py`: encryption detection via `pikepdf`, decryption with a supplied password, text extraction via `pdfplumber`, explicit `NEEDS_PASSWORD` and `NO_TEXT_LAYER` error states
-- `ingest/adapters/`: `generic_csv.py` (column-mapping heuristics), `hdfc_pdf.py`, `icici_pdf.py`, `llm_fallback.py` (structured extraction via `claude-sonnet-5`), each implementing the `StatementAdapter` protocol
+- `ingest/adapters/`: `generic_csv.py` (column-mapping heuristics), `hdfc_pdf.py`, `icici_pdf.py`, `llm_fallback.py` (structured extraction via `gemini-3.5-flash-lite`), each implementing the `StatementAdapter` protocol
 - `ingest/registry.py`: try adapters by descending `detect()` confidence
 - `ingest/normalize.py`: narration normalisation, VPA extraction, channel classification, direction, amount → paise
 - `ingest/dedupe.py`: `dedupe_key` computation, `ON CONFLICT DO NOTHING`
@@ -155,7 +160,7 @@ Implement DESIGN.md §7.
 
 - `enrich/merchants.py`: ~300-entry Indian merchant dictionary (generate with **[H]**, review with **[O]**), each entry `{pattern, match_type, merchant, category_slug}`
 - `enrich/rules.py`: tier-1 matching — VPA handle, narration regex, dictionary, ordered by `priority`
-- `enrich/llm_classify.py`: tier-2 batching (50 per call), **redaction applied first**, structured output, results cached into `merchant_rules` keyed by `sha256(normalized_narration)`
+- `enrich/llm_classify.py`: tier-2 batching on `gemini-3.5-flash-lite` (50 per call), **redaction applied first**, structured output, results cached into `merchant_rules` keyed by `sha256(normalized_narration)`
 - Confidence below 0.6 → `Uncategorised`, never a guess
 - `PATCH /api/transactions/{id}/category` → writes a `scope=USER, priority=1000` rule and retroactively updates matching historical rows, returning the count updated
 
@@ -207,7 +212,7 @@ Implement DESIGN.md §8 in `services/api/app/engine/`. **Pure functions, no data
 > `silent_mandate` count is one per unacknowledged silent series and is an
 > inventory rather than an alert list, which is the point of Mandate Radar.
 > All of these are asserted in `services/api/tests/test_seed.py`.
-- No engine function imports `anthropic`, `supabase` or any database module
+- No engine function imports `google.genai`, `supabase` or any database module
 - Every money value in every return type is an `int`
 
 ---
@@ -217,11 +222,11 @@ Implement DESIGN.md §8 in `services/api/app/engine/`. **Pure functions, no data
 Implement DESIGN.md §9.
 
 - `agent/tools.py` — all 11 tools, each typed, each returning `{data, citations}` with `citations[].txn_ids` populated
-- `agent/loop.py` — Anthropic tool-use loop on `claude-sonnet-5`, streaming, max 6 tool iterations
+- `agent/loop.py` — Gemini function-calling loop on `gemini-3.8-flash`, streaming, max 6 tool iterations
 - `agent/prompts.py` — system prompt encoding the grounding constraint, the citation requirement, the advice boundary, and the untrusted-document-text delimiter rule
 - `agent/guardrails.py` — post-generation advice-boundary check with the scripted decline from DESIGN.md §9.4
 - `privacy/redact.py` — every pattern in DESIGN.md §12.1, request-scoped reverse map, `ai_disclosures` row written on every call
-- `agent/summary.py` — monthly summary on `claude-opus-5` from pre-computed engine output
+- `agent/summary.py` — monthly summary on `gemini-2.5-pro` from pre-computed engine output
 - `POST /api/agent/ask` (SSE), `POST /api/summary/generate`
 
 **Acceptance criteria**
@@ -416,7 +421,7 @@ See `SUBMISSION.md` for the timed script, form answers and judge test-script.
 | Behind at hour 12 | Cut T13 and T14. Never compress T12. |
 | PDF parsing eats the budget | Ship generic CSV + LLM fallback only. Demo the CSV path. State the limitation. |
 | T06 engine overruns | Cut `simulate.py` scope to goal-ETA-only (drop category sliders). It is the largest cuttable piece. |
-| Anthropic rate limits | Drop tier-2 categorisation to on-demand rather than bulk on ingest. Tier 1 already covers ~75%. |
+| Gemini free-tier rate limits (≈10 RPM) | Drop tier-2 categorisation to on-demand rather than bulk on ingest. Tier 1 already covers ~75%, and the narration-hash cache means each unique shape costs one call ever. |
 | Render cold starts hurt the demo | Record the video against localhost; keep production live for judges with the keep-alive ping. |
 | Ahead at hour 15 | Pull forward Scheme Match (DESIGN.md §14) — ~45 min, best remaining value per minute. |
 

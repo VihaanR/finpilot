@@ -15,7 +15,7 @@ services:
       - key: PYTHON_VERSION
         value: "3.11.13"
       # Values are set in the Render dashboard, never committed here.
-      - key: ANTHROPIC_API_KEY
+      - key: GEMINI_API_KEY
         sync: false
       - key: SUPABASE_URL
         sync: false

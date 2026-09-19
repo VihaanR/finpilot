@@ -1,7 +1,7 @@
 """FinPilot analytics engine.
 
 DESIGN.md section 8. Pure, deterministic, unit-tested. Nothing in this package
-imports `anthropic`, `supabase`, SQLAlchemy or any database module — that
+imports `google.genai`, `supabase`, SQLAlchemy or any database module — that
 isolation is what makes the engine testable without infrastructure, and it is
 enforced by a test in `tests/test_purity.py`.
 

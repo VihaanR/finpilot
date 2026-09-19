@@ -233,5 +233,6 @@ create table if not exists document_chunks (
   document_id uuid not null references documents(id) on delete cascade,
   user_id     uuid not null references auth.users(id) on delete cascade,
   chunk_text  text not null,
-  embedding   vector(1024)
+  -- gemini-embedding-2 truncated to 768 dims via MRL (DESIGN.md 5.2, 9.1).
+  embedding   vector(768)
 );

@@ -6,7 +6,7 @@ fastapi==0.115.6
 uvicorn[standard]==0.34.0
 python-multipart==0.0.20
 sse-starlette==2.2.1
-pydantic==2.10.5
+pydantic==2.13.5
 pydantic-settings==2.7.1
 
 # --- Data / parsing ---
@@ -22,7 +22,8 @@ psycopg[binary]==3.2.3
 supabase==2.11.0
 
 # --- AI ---
-anthropic==0.43.0
+# Google Gen AI SDK. Runtime inference is Gemini throughout (DESIGN.md 9.1).
+google-genai==2.24.0
 
 # --- Runtime ---
 httpx==0.28.1

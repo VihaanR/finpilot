@@ -14,8 +14,17 @@ class Settings(BaseSettings):
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
 
-    # --- AI ---
-    anthropic_api_key: str = ""
+    # --- AI (Google Gemini, DESIGN.md 9.1) ---
+    gemini_api_key: str = ""
+    #: One model per job rather than one model everywhere: the jobs have
+    #: different latency and quality profiles. All are free-tier eligible.
+    gemini_model_chat: str = "gemini-3.8-flash"
+    gemini_model_summary: str = "gemini-2.5-pro"
+    gemini_model_classify: str = "gemini-3.5-flash-lite"
+    gemini_model_embedding: str = "gemini-embedding-2"
+    #: gemini-embedding-2 emits 3072 dims and truncates cleanly via MRL.
+    #: Must match document_chunks.embedding in the migration.
+    embedding_dimensions: int = 768
 
     # --- Supabase ---
     supabase_url: str = ""
