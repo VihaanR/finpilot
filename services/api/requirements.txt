@@ -1,0 +1,33 @@
+# FinPilot API — pinned for reproducible Render builds.
+# Render build command: pip install -r requirements.txt
+
+# --- Web framework ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+sse-starlette==2.2.1
+pydantic==2.10.5
+pydantic-settings==2.7.1
+
+# --- Data / parsing ---
+pdfplumber==0.11.5
+pikepdf==9.5.1
+pandas==2.2.3
+numpy==2.2.1
+openpyxl==3.1.5
+
+# --- Persistence ---
+sqlalchemy==2.0.36
+psycopg[binary]==3.2.3
+supabase==2.11.0
+
+# --- AI ---
+anthropic==0.43.0
+
+# --- Runtime ---
+httpx==0.28.1
+python-dotenv==1.0.1
+
+# --- Tests ---
+pytest==8.3.4
+pytest-asyncio==0.25.2
