@@ -6,35 +6,56 @@ Session: 19 Sep 2026 — built T01, T02 (authored, not applied), T03 and T06 fro
 a bare repo of planning docs; found and fixed three real defects in the
 recurrence/anomaly engine by running it against the generated seed data; then
 switched the runtime LLM provider from Anthropic to Google Gemini (free tier).
+Last refreshed after a full re-verification pass — no code changed since
+`7772813`, but every claim below was re-run rather than carried forward.
 
 ## Verified state
 
-Every line below was run and observed in this session, from the repo root,
-against commit `7772813`.
+Every line was run and observed in this session, from the repo root, against
+commit `5e06750`.
 
-- `pytest services/api/tests/` → **200 passed** in 0.32s.
-- `git log --oneline` → 4 commits (`7772813`, `1899d7f`, `5ced4f8`, `c5a8fed`);
-  `git status --short` → empty, working tree clean, pushed to `origin/main`.
+**Repository**
+
+- `git rev-list --count HEAD` → **5 commits**, HEAD `5e06750`.
+- `git status --short` → empty; `git status -sb` → `main...origin/main` with no
+  divergence. Local and remote both at `5e06750`, working tree clean.
+
+**Tests and services**
+
+- `pytest services/api/tests/` → **200 passed** in 0.36s.
 - `GET /health` on a live uvicorn → `{"status":"ok"}`, HTTP 200.
-- `cd apps/web && npm run build` → exit 0, 5 static pages, no type errors.
-- `import app.models` → 14 SQLAlchemy tables, 31 Pydantic schemas.
+- `cd apps/web && npm run build` → "Compiled successfully", 5/5 static pages,
+  no type errors.
+- `import app.models` → **14** SQLAlchemy tables, **31** Pydantic schemas.
+
+**Gemini provider swap**
+
+- `import anthropic` → `ModuleNotFoundError`; the package is gone from the venv.
+- `import google.genai` → **2.24.0**.
+- `app.config` resolves `gemini-3.8-flash` (chat), `gemini-2.5-pro` (summary),
+  `gemini-3.5-flash-lite` (classify), `gemini-embedding-2` at **768 dims**.
+- `document_chunks.embedding` in the migration → `vector(768)`, matching
+  `settings.embedding_dimensions`.
+
+**Schema and engine invariants**
+
 - Category taxonomy migration → **42 rows** (T02 requires > 40).
 - Float-in-money scan over `supabase/migrations/*.sql` → 6 matches, all
   non-money: `parser_confidence`, `category_confidence`, `median_gap_days`,
   `gap_mad`, `confidence`, plus one comment line.
-- Engine purity → **0** files under `app/engine/` import `google.genai`,
-  `anthropic`, `supabase`, `sqlalchemy` or `psycopg`.
+- Engine purity → **0** files under `app/engine/` import `google`, `anthropic`,
+  `supabase`, `sqlalchemy` or `psycopg`.
+
+**Seed dataset**
+
 - `seed/generate.py --seed 42 --as-of 2026-09-19` run twice → identical md5 for
-  all five outputs. **936 transactions**, 3 accounts, 14 months, and
+  all five outputs. **936 transactions**, 3 accounts, 14 months,
   `seed/expected.json` holding 34 ground-truth values.
-- Provider swap verified: `anthropic` uninstalled (`import anthropic` →
-  `ModuleNotFoundError`), `google-genai 2.24.0` imports, all **200 tests still
-  pass**, `/health` still 200, `app.config` resolves the four Gemini model IDs
-  and 768 embedding dims, and `document_chunks.embedding` is `vector(768)`.
 - Engine over the seed → **34 recurring series** (23 ACTIVE, 4 PROBABLE,
-  7 LAPSED), of which **9 are subscriptions**; **27 anomalies** spanning all
-  five DESIGN.md §8.2 types (19 `silent_mandate`, 3 `category_spike`,
-  3 `duplicate_charge`, 1 `price_hike`, 1 `new_large_merchant`).
+  7 LAPSED), **9 of them subscriptions** (8 ACTIVE plus the annual Amazon Prime
+  as PROBABLE); **27 anomalies** spanning all five DESIGN.md §8.2 types
+  (19 `silent_mandate`, 3 `category_spike`, 3 `duplicate_charge`,
+  1 `price_hike`, 1 `new_large_merchant`).
 
 ## Completed recently
 
@@ -85,6 +106,11 @@ against commit `7772813`.
   that is a user-visible privacy claim and had to be accurate. BUILD_TASKS.md's
   `[O]`/`[S]`/`[H]` tags were deliberately left alone: they say which model
   *writes the code*, not what the product calls.
+- **Doc hygiene** (`5e06750`). The ledger had carried four references forward
+  unchecked after the Gemini switch — a stale HEAD hash, a stale commit count,
+  `anthropic` in the engine-purity line, and "the Anthropic key" as T04's
+  remaining dependency. Corrected; that is precisely the failure mode this
+  file exists to prevent.
 - **Docs** — BUILD_TASKS.md T06 and T11 corrected in place. "Exactly 9
   recurring series" was unsatisfiable alongside T03's required seed contents;
   annotated with the measured figures. `CLAUDE.md` and this file added.
