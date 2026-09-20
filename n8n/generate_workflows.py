@@ -6,6 +6,15 @@ Kept, rather than deleted after one run, because it's the only record of how
 this file was actually produced and the easiest way to regenerate it after
 an edit; see n8n/README.md for the verification gap this leaves.
 
+Deliberately one-way. The original design also had a "FinPilot - Ingest"
+workflow — a Telegram Trigger that accepted an uploaded statement or an
+arbitrary question and had the bot answer, i.e. a second conversational
+front end for the chat agent. The owner asked to drop that scope entirely:
+this bot should push information the user wants (a daily brief, a mandate
+alert, the monthly summary), not act on inbound messages of any kind. What
+remains is exactly that — three schedule-triggered workflows, no Telegram
+Trigger, no inbound webhook.
+
     python generate_workflows.py
 """
 import json
@@ -82,29 +91,6 @@ def schedule_trigger(name, pos, cron_expr):
     }
 
 
-def if_node(name, pos, condition_left, operator, condition_right=None):
-    condition = {
-        "leftValue": condition_left,
-        "rightValue": condition_right if condition_right is not None else "",
-        "operator": {"type": "string" if operator != "exists" else "object", "operation": operator},
-    }
-    return {
-        "parameters": {
-            "conditions": {
-                "options": {"caseSensitive": True, "leftValue": "", "typeValidation": "loose"},
-                "conditions": [condition],
-                "combinator": "and",
-            },
-            "options": {},
-        },
-        "id": nid(),
-        "name": name,
-        "type": "n8n-nodes-base.if",
-        "typeVersion": 2,
-        "position": pos,
-    }
-
-
 def connect(*pairs):
     """pairs: (from_name, to_name) or (from_name, to_name, output_index)."""
     conns = {}
@@ -128,90 +114,6 @@ def workflow(name, nodes, connections, active=False):
         "meta": {"templateCredsSetupCompleted": False},
     }
 
-
-# --- Workflow 1: Ingest (Telegram Trigger) ----------------------------------
-
-trigger1 = {
-    "parameters": {
-        "updates": ["message"],
-        "additionalFields": {},
-    },
-    "id": nid(),
-    "name": "Telegram Trigger",
-    "type": "n8n-nodes-base.telegramTrigger",
-    "typeVersion": 1.1,
-    "position": [0, 0],
-    "credentials": TELEGRAM_CRED,
-    "webhookId": "finpilot-ingest-webhook",
-}
-
-has_doc = if_node(
-    "Has document?", [220, 0], "={{ $json.message.document }}", "exists"
-)
-
-download_doc = {
-    "parameters": {
-        "resource": "file",
-        "fileId": "={{ $json.message.document.file_id }}",
-    },
-    "id": nid(),
-    "name": "Download document",
-    "type": "n8n-nodes-base.telegram",
-    "typeVersion": 1.2,
-    "position": [440, -120],
-    "credentials": TELEGRAM_CRED,
-}
-
-ingest_call = http_node(
-    "POST /api/ingest/sync",
-    [660, -120],
-    "POST",
-    "/api/ingest/sync",
-    body_params=[{"parameterType": "formBinaryData", "name": "file", "inputDataFieldName": "data"}],
-    is_form=True,
-)
-
-reply_ingest = telegram_send(
-    "Reply with parse summary",
-    [880, -120],
-    "={{ $json.adapter }} read the statement at {{ Math.round($json.confidence * 100) }}% "
-    "confidence — {{ $json.inserted }} new transaction(s), {{ $json.duplicates }} duplicate(s) skipped.",
-    chat_id_expr="={{ $('Telegram Trigger').item.json.message.chat.id }}",
-)
-
-ask_call = http_node(
-    "POST /api/agent/ask/sync",
-    [440, 120],
-    "POST",
-    "/api/agent/ask/sync",
-    body_params={"question": "={{ $json.message.text }}"},
-)
-
-reply_ask = telegram_send(
-    "Reply with answer",
-    [660, 120],
-    "={{ $json.answer || $json.error || \"I could not answer that.\" }}",
-    chat_id_expr="={{ $('Telegram Trigger').item.json.message.chat.id }}",
-)
-
-wf1 = workflow(
-    "FinPilot - Ingest",
-    [trigger1, has_doc, download_doc, ingest_call, reply_ingest, ask_call, reply_ask],
-    {
-        **connect(("Telegram Trigger", "Has document?")),
-        "Has document?": {
-            "main": [
-                [{"node": "Download document", "type": "main", "index": 0}],
-                [{"node": "POST /api/agent/ask/sync", "type": "main", "index": 0}],
-            ]
-        },
-        **connect(
-            ("Download document", "POST /api/ingest/sync"),
-            ("POST /api/ingest/sync", "Reply with parse summary"),
-            ("POST /api/agent/ask/sync", "Reply with answer"),
-        ),
-    },
-)
 
 # --- Workflow 2: Daily brief (08:00 IST) ------------------------------------
 
@@ -314,7 +216,7 @@ wf4 = workflow(
     },
 )
 
-out = [wf1, wf2, wf3, wf4]
+out = [wf2, wf3, wf4]
 path = "finpilot-workflows.json"
 with open(path, "w", encoding="utf-8") as f:
     json.dump(out, f, indent=2, ensure_ascii=False)

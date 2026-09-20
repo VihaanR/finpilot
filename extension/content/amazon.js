@@ -68,7 +68,8 @@ function finpilotAmazonRun() {
 // moment to settle, then watch for further changes (quantity edits, etc.)
 // without re-showing the dialog once shown on this page load. Debounced —
 // an unthrottled observer on a busy page would re-scan the whole body on
-// every mutation.
+// every mutation. This is an early, informational warning only — it cannot
+// stop a click that has already happened.
 let finpilotAmazonDebounce = null;
 function finpilotAmazonScheduleRun() {
   clearTimeout(finpilotAmazonDebounce);
@@ -78,3 +79,20 @@ function finpilotAmazonScheduleRun() {
 setTimeout(finpilotAmazonRun, 1200);
 const finpilotAmazonObserver = new MutationObserver(finpilotAmazonScheduleRun);
 finpilotAmazonObserver.observe(document.body, { childList: true, subtree: true });
+
+// The actual guard: intercept the checkout click itself so the page cannot
+// navigate away before the budget check runs.
+const FINPILOT_AMAZON_CHECKOUT_SELECTOR =
+  "#buy-now-button, #placeYourOrder, input[name='placeYourOrder1'], #submitOrderButtonId, #hlb-view-cart-announce";
+
+finpilotGuardCheckoutClicks({
+  site: "amazon.in",
+  isCheckoutTrigger(el) {
+    if (el.closest(FINPILOT_AMAZON_CHECKOUT_SELECTOR)) return true;
+    const label = (el.textContent || el.value || "").trim().toLowerCase();
+    return FINPILOT_CHECKOUT_WORDS.some((w) => label.includes(w));
+  },
+  computeTotal() {
+    return finpilotAmazonPrimaryTotal() ?? finpilotHeuristicTotal();
+  },
+});

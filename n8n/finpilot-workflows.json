@@ -1,274 +1,5 @@
 [
   {
-    "name": "FinPilot - Ingest",
-    "nodes": [
-      {
-        "parameters": {
-          "updates": [
-            "message"
-          ],
-          "additionalFields": {}
-        },
-        "id": "49f2ca4a-eda2-4aba-a0cc-c78c50cb2e5a",
-        "name": "Telegram Trigger",
-        "type": "n8n-nodes-base.telegramTrigger",
-        "typeVersion": 1.1,
-        "position": [
-          0,
-          0
-        ],
-        "credentials": {
-          "telegramApi": {
-            "id": "telegram-bot-cred",
-            "name": "Telegram Bot"
-          }
-        },
-        "webhookId": "finpilot-ingest-webhook"
-      },
-      {
-        "parameters": {
-          "conditions": {
-            "options": {
-              "caseSensitive": true,
-              "leftValue": "",
-              "typeValidation": "loose"
-            },
-            "conditions": [
-              {
-                "leftValue": "={{ $json.message.document }}",
-                "rightValue": "",
-                "operator": {
-                  "type": "object",
-                  "operation": "exists"
-                }
-              }
-            ],
-            "combinator": "and"
-          },
-          "options": {}
-        },
-        "id": "48842e20-c131-4201-9890-b69ffb11ac84",
-        "name": "Has document?",
-        "type": "n8n-nodes-base.if",
-        "typeVersion": 2,
-        "position": [
-          220,
-          0
-        ]
-      },
-      {
-        "parameters": {
-          "resource": "file",
-          "fileId": "={{ $json.message.document.file_id }}"
-        },
-        "id": "151bf9fa-feb6-4160-9c17-d2a28ba42f40",
-        "name": "Download document",
-        "type": "n8n-nodes-base.telegram",
-        "typeVersion": 1.2,
-        "position": [
-          440,
-          -120
-        ],
-        "credentials": {
-          "telegramApi": {
-            "id": "telegram-bot-cred",
-            "name": "Telegram Bot"
-          }
-        }
-      },
-      {
-        "parameters": {
-          "method": "POST",
-          "url": "https://finpilot-w4ki.onrender.com/api/ingest/sync",
-          "authentication": "genericCredentialType",
-          "genericAuthType": "httpHeaderAuth",
-          "options": {},
-          "sendBody": true,
-          "specifyBody": "keypair",
-          "contentType": "multipart-form-data",
-          "bodyParameters": {
-            "parameters": [
-              {
-                "parameterType": "formBinaryData",
-                "name": "file",
-                "inputDataFieldName": "data"
-              }
-            ]
-          }
-        },
-        "id": "46db865a-4b02-40f1-b5ad-1befe94ad21f",
-        "name": "POST /api/ingest/sync",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.2,
-        "position": [
-          660,
-          -120
-        ],
-        "credentials": {
-          "httpHeaderAuth": {
-            "id": "finpilot-api-cred",
-            "name": "FinPilot API"
-          }
-        }
-      },
-      {
-        "parameters": {
-          "resource": "message",
-          "operation": "sendMessage",
-          "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
-          "text": "={{ $json.adapter }} read the statement at {{ Math.round($json.confidence * 100) }}% confidence — {{ $json.inserted }} new transaction(s), {{ $json.duplicates }} duplicate(s) skipped.",
-          "additionalFields": {
-            "parse_mode": "Markdown"
-          }
-        },
-        "id": "bfe2d161-81ae-42f9-ad85-04652e046c31",
-        "name": "Reply with parse summary",
-        "type": "n8n-nodes-base.telegram",
-        "typeVersion": 1.2,
-        "position": [
-          880,
-          -120
-        ],
-        "credentials": {
-          "telegramApi": {
-            "id": "telegram-bot-cred",
-            "name": "Telegram Bot"
-          }
-        }
-      },
-      {
-        "parameters": {
-          "method": "POST",
-          "url": "https://finpilot-w4ki.onrender.com/api/agent/ask/sync",
-          "authentication": "genericCredentialType",
-          "genericAuthType": "httpHeaderAuth",
-          "options": {},
-          "sendBody": true,
-          "specifyBody": "keypair",
-          "contentType": "json",
-          "bodyParameters": {
-            "parameters": [
-              {
-                "name": "question",
-                "value": "={{ $json.message.text }}"
-              }
-            ]
-          }
-        },
-        "id": "518f8b82-d5ba-4549-9fb6-6cdaca3f2072",
-        "name": "POST /api/agent/ask/sync",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.2,
-        "position": [
-          440,
-          120
-        ],
-        "credentials": {
-          "httpHeaderAuth": {
-            "id": "finpilot-api-cred",
-            "name": "FinPilot API"
-          }
-        }
-      },
-      {
-        "parameters": {
-          "resource": "message",
-          "operation": "sendMessage",
-          "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
-          "text": "={{ $json.answer || $json.error || \"I could not answer that.\" }}",
-          "additionalFields": {
-            "parse_mode": "Markdown"
-          }
-        },
-        "id": "b6015509-ae7f-4b80-b14e-c09aa6f5ed0e",
-        "name": "Reply with answer",
-        "type": "n8n-nodes-base.telegram",
-        "typeVersion": 1.2,
-        "position": [
-          660,
-          120
-        ],
-        "credentials": {
-          "telegramApi": {
-            "id": "telegram-bot-cred",
-            "name": "Telegram Bot"
-          }
-        }
-      }
-    ],
-    "connections": {
-      "Telegram Trigger": {
-        "main": [
-          [
-            {
-              "node": "Has document?",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Has document?": {
-        "main": [
-          [
-            {
-              "node": "Download document",
-              "type": "main",
-              "index": 0
-            }
-          ],
-          [
-            {
-              "node": "POST /api/agent/ask/sync",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Download document": {
-        "main": [
-          [
-            {
-              "node": "POST /api/ingest/sync",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "POST /api/ingest/sync": {
-        "main": [
-          [
-            {
-              "node": "Reply with parse summary",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "POST /api/agent/ask/sync": {
-        "main": [
-          [
-            {
-              "node": "Reply with answer",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      }
-    },
-    "active": false,
-    "settings": {
-      "executionOrder": "v1"
-    },
-    "meta": {
-      "templateCredsSetupCompleted": false
-    }
-  },
-  {
     "name": "FinPilot - Daily brief",
     "nodes": [
       {
@@ -282,7 +13,7 @@
             ]
           }
         },
-        "id": "7262561f-83c2-40b1-95db-30cac74cde27",
+        "id": "059866e1-639f-4bbc-81c0-bd7762ff1f4a",
         "name": "Daily 08:00 IST",
         "type": "n8n-nodes-base.scheduleTrigger",
         "typeVersion": 1.2,
@@ -299,7 +30,7 @@
           "genericAuthType": "httpHeaderAuth",
           "options": {}
         },
-        "id": "bbe2fc59-b455-4824-9731-7db9b723946d",
+        "id": "1eaaa7ca-26c2-4115-918c-3d83756250be",
         "name": "GET /api/dashboard",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
@@ -322,7 +53,7 @@
           "genericAuthType": "httpHeaderAuth",
           "options": {}
         },
-        "id": "fb529639-7082-452f-9959-ce52536e7ee1",
+        "id": "7e585b34-08a5-4c8a-b45a-27e85f630711",
         "name": "GET /api/radar",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
@@ -341,7 +72,7 @@
         "parameters": {
           "jsCode": "const dash = $('GET /api/dashboard').first().json;\nconst radar = $json;\nconst sts = dash.safe_to_spend || {};\nconst dueToday = (radar.banner?.items || []).filter(i => i.days_away <= 1);\nlet text = 'Good morning. Safe to spend: ₹' + Math.round((sts.safe_daily_paise||0)/100)\n  + '/day. Discretionary left this month: ₹' + Math.round((sts.discretionary_paise||0)/100) + '.';\nif (dueToday.length) {\n  text += '\\nDue today: ' + dueToday.map(i => i.merchant + ' ₹' + Math.round(i.amount_paise/100)).join(', ') + '.';\n}\nreturn [{ json: { text } }];"
         },
-        "id": "486a2199-859a-46b0-9f56-f7bd08f3ba7a",
+        "id": "b7ee59ed-2d8f-4b76-b22b-6ed8720695d5",
         "name": "Compose brief",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
@@ -360,7 +91,7 @@
             "parse_mode": "Markdown"
           }
         },
-        "id": "9f5431b6-01da-49e0-8826-b16d46c05261",
+        "id": "35c62ac2-f32b-4e93-8750-b65849ff63b9",
         "name": "Send daily brief",
         "type": "n8n-nodes-base.telegram",
         "typeVersion": 1.2,
@@ -444,7 +175,7 @@
             ]
           }
         },
-        "id": "12d964e4-c440-44c8-af38-79028326d378",
+        "id": "ba073efa-2a12-446c-aefc-6b5775d86d55",
         "name": "Daily 09:00 IST",
         "type": "n8n-nodes-base.scheduleTrigger",
         "typeVersion": 1.2,
@@ -461,7 +192,7 @@
           "genericAuthType": "httpHeaderAuth",
           "options": {}
         },
-        "id": "21d7e8e2-7430-4af9-a0cd-ee4f849cbf7b",
+        "id": "07ad2086-790e-4c09-b2fd-d6ecf9679fd0",
         "name": "GET /api/radar",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
@@ -480,7 +211,7 @@
         "parameters": {
           "jsCode": "const items = $input.first().json.banner.items || [];\nconst silent = items.filter(i => i.afa_band === 'SILENT' && !i.acknowledged);\nreturn silent.map(i => ({ json: i }));"
         },
-        "id": "ca1f18d4-fd87-40ac-ac23-fcb73bf1e2e7",
+        "id": "2380579c-2e19-46be-aff6-d6164731388f",
         "name": "Filter silent mandates",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
@@ -499,7 +230,7 @@
             "parse_mode": "Markdown"
           }
         },
-        "id": "724a216a-60fc-4f26-90b4-3b7334f40faf",
+        "id": "b4d9d677-b9ea-4470-9f5c-555591db6e5e",
         "name": "Send mandate alert",
         "type": "n8n-nodes-base.telegram",
         "typeVersion": 1.2,
@@ -572,7 +303,7 @@
             ]
           }
         },
-        "id": "fc353b27-af60-43c1-8b37-71c66e10c31f",
+        "id": "9e398d20-c96d-4f75-a89d-c69d4109cf5e",
         "name": "Monthly 1st 09:00 IST",
         "type": "n8n-nodes-base.scheduleTrigger",
         "typeVersion": 1.2,
@@ -595,7 +326,7 @@
             "parameters": []
           }
         },
-        "id": "710a4f7b-24ad-4041-ab42-bf44468f3edc",
+        "id": "4f936f7a-de3c-41d0-a13c-15a9b587f5ec",
         "name": "POST /api/summary/generate",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
@@ -620,7 +351,7 @@
             "parse_mode": "Markdown"
           }
         },
-        "id": "babb890d-9cbf-4c32-88d7-13a9510bd073",
+        "id": "e13b4171-1d62-4b18-8ee0-74ae3870cbf6",
         "name": "Send monthly summary",
         "type": "n8n-nodes-base.telegram",
         "typeVersion": 1.2,

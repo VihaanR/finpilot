@@ -167,8 +167,8 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 
 1. Open Telegram, search **@BotFather**
 2. `/newbot` → name `FinPilot` → username `finpilot_<something>_bot` (must be globally unique and end in `bot`)
-3. Copy the token → `TELEGRAM_BOT_TOKEN`
-4. `/setdescription` → *"Your personal finance agent. Send a statement or ask a question."*
+3. Copy the token → `TELEGRAM_BOT_TOKEN` (set in `services/api/.env`, never here — this file is a tracked, public-repo document)
+4. `/setdescription` → *"AI-powered personal finance assistant that gives money-smart guidance. Send a bank statement or ask a question."*
 5. Message your own bot once so it can message you back — Telegram bots cannot initiate conversations. This also gives you your own chat id: check `https://api.telegram.org/bot<token>/getUpdates` after messaging it, and look for `message.chat.id` — you need this for step 6 below.
 
 The daily brief, mandate alert and monthly summary run **on their own
@@ -199,18 +199,24 @@ built in n8n's own editor and exported — Docker wasn't available in the
 session that built T14, so none of this has actually been imported or run
 against a live bot yet. Everything below is what closes that gap.
 
-1. **Workflows → Import from File** → `n8n/finpilot-workflows.json` — imports all four at once
+1. **Workflows → Import from File** → `n8n/finpilot-workflows.json` — imports all three at once
 2. **Credentials → Add credential → Telegram API** → paste the bot token → name it exactly **`Telegram Bot`**
 3. **Credentials → Add credential → Header Auth** → Name: `Authorization`, Value: `Bearer <INTERNAL_API_TOKEN>` (any value works today — this API has no auth enforced yet, §8e) → name it exactly **`FinPilot API`**
 4. The API base URL is already baked into each HTTP node as your Render URL — no separate variable to set, but double-check it if you're testing against localhost instead
-5. Open the **Daily brief**, **Mandate alert** and **Monthly summary** workflows and replace `REPLACE_WITH_YOUR_TELEGRAM_CHAT_ID` in each one's Telegram node with the chat id from step 5 above — a schedule trigger has no inbound message to reply to, so this can't be inferred automatically the way the Ingest workflow's replies are
-6. **Activate** all four workflows
+5. Open the **Daily brief**, **Mandate alert** and **Monthly summary** workflows and replace `REPLACE_WITH_YOUR_TELEGRAM_CHAT_ID` in each one's Telegram node with your own chat id (message your bot once, then check `https://api.telegram.org/bot<token>/getUpdates` for `message.chat.id`) — every workflow here is schedule-triggered, so none of them has an inbound message to infer it from
+6. **Activate** all three workflows
 
 > The credential names must match exactly. The exported JSON references credentials by name; a mismatch causes silent no-ops rather than visible errors.
+>
+> This bot is intentionally one-way: it pushes the daily brief, mandate
+> alerts and the monthly summary to your Telegram chat, and does not accept
+> or act on anything sent to it. The design originally had a fourth,
+> two-way workflow for that; it was dropped on request (BUILD_TASKS.md T14,
+> DESIGN.md §10.6).
 
-Test each acceptance criterion from BUILD_TASKS.md T14 by hand: send the bot
-a statement file, ask it a spending question, use "Execute Workflow" on the
-Daily brief to trigger it without waiting for 08:00.
+Test each acceptance criterion from BUILD_TASKS.md T14 by hand: use "Execute
+Workflow" on each of the three workflows to trigger it without waiting for
+its schedule, and confirm the message arrives in Telegram.
 
 ### Re-export for submission
 

@@ -1,0 +1,13 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>Mock Amazon Cart, Real Navigation</title></head>
+  <body>
+    <!-- Unlike the other fixtures, this one actually navigates on click —
+         a real <a href> — so a test can prove the click-guard stops the
+         browser from leaving the page, not just that a dialog appears. -->
+    <div id="sc-subtotal-amount-activecart">
+      Subtotal (1 item): <span class="a-offscreen">₹18,499.00</span>
+    </div>
+    <a id="placeYourOrder" href="#navigated">Place your order</a>
+  </body>
+</html>

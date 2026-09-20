@@ -237,12 +237,11 @@ afterwards; the schema is empty of data.
   `amazon.in` or `flipkart.com` cart** — that's the one thing left needing a
   human account, flagged in `extension/README.md` and USER.md §7.
 
-  **T14** (`n8n/finpilot-workflows.json`) — four workflows (Ingest, Daily
-  brief, Mandate alert, Monthly summary), hand-authored via
+  **T14** (`n8n/finpilot-workflows.json`) — three workflows (Daily brief,
+  Mandate alert, Monthly summary), hand-authored via
   `n8n/generate_workflows.py` against n8n's node schema rather than built in
   n8n's own editor, since Docker wasn't available to run n8n locally. Points
-  at the API routes that actually exist (`/api/ingest/sync`,
-  `/api/agent/ask/sync`, `/api/dashboard`, `/api/radar`,
+  at the API routes that actually exist (`/api/dashboard`, `/api/radar`,
   `/api/summary/generate`) rather than the `/api/brief`/`/api/obligations`
   DESIGN.md §10.6 assumed and this session never built. Structurally
   verified — valid JSON, every node reachable from exactly one trigger with
@@ -250,6 +249,15 @@ afterwards; the schema is empty of data.
   exercised against a live Telegram bot.** `n8n/README.md` is explicit about
   that gap and has the exact steps to close it once Docker and a bot token
   exist.
+
+  **Narrowed 20 Sep 2026.** Originally four workflows — the fourth,
+  **Ingest**, was a Telegram Trigger that accepted an uploaded statement or
+  a typed question and answered through the chat agent, a second
+  conversational front end alongside the web app. Removed on the owner's
+  explicit instruction: *"I don't want the telegram bot to do anything, I
+  just want it to ship out important info."* `generate_workflows.py` no
+  longer emits a Telegram Trigger node or an inbound webhook — the bot only
+  ever calls `sendMessage`.
 
   `DESIGN.md` §10.5/§10.6 and `BUILD_TASKS.md`'s T13/T14 sections both carry
   correction notes recording these deviations and the verification state,
@@ -564,6 +572,66 @@ afterwards; the schema is empty of data.
   and runs Playwright with `--grep-invert @quota`. That closes the T08
   leftover and means the axe floor is enforced on every push rather than
   whenever someone remembers to run a script.
+
+- **Two real Budget Guard defects reported from an actual cart, both fixed.**
+  The owner reported an inaccurate cart total (₹5,93,990 against a much
+  smaller actual purchase) and that the interstitial did not stop the page
+  from navigating away. Both were real, and both are now covered by
+  committed specs in `apps/web/tests/extension.spec.ts` (17 total, up from
+  11):
+  1. **Accuracy.** `finpilotHeuristicTotal`'s old rule — biggest ₹ figure
+     near any checkout-shaped button — let an EMI financing panel ("Total
+     EMI payable: ₹5,93,990.00 over 24 months") outrank the real order
+     total, since EMI panels routinely sit right next to the checkout
+     button. It now prefers a figure with a total/subtotal-shaped label
+     (`order total`, `grand total`, `amount payable`, …) and excludes any
+     figure whose context mentions EMI, MRP, "you save", delivery, or is
+     rendered strikethrough — falling back to the old proximity rule only
+     when nothing on the page carries a total-shaped label at all.
+     `test-fixtures/amazon-cart-emi-panel.html` reproduces exactly this.
+     (One test-harness-only false alarm along the way: the label-context
+     scan initially climbed past `<body>` into `<head>`, picking up
+     injected `<script>` text that happened to contain excluded words —
+     fixed by capping the climb at `<body>`, which also tightens the
+     production behaviour.)
+  2. **Navigation.** The old mechanism — a `MutationObserver` on a 600ms
+     debounce — only ever *displayed* the dialog after the fact; it never
+     stopped a click that had already submitted a form or fired the site's
+     own navigation. `content/click-guard.js` is the actual fix: a
+     capture-phase click listener on the checkout button itself,
+     `preventDefault`-ed before the site's own handlers run, that only lets
+     the click through (via a one-shot bypass + re-dispatched click) once
+     the budget check clears or the user picks "Continue anyway."
+     `test-fixtures/amazon-cart-navigable.html` has a real `<a href>` so the
+     spec can assert the hash never changes until then. Writing this
+     immediately caught a second defect: the interstitial's own "Continue
+     anyway" button contains the checkout word "continue", so the guard was
+     intercepting its own dialog and the button did nothing — fixed by
+     excluding clicks inside `#finpilot-guard-overlay` from interception.
+
+  `pytest services/api/tests/ evals/` stayed green and the full Playwright
+  suite (`--grep-invert @quota`) is now **36/36** with the API live.
+
+- **T14 narrowed from a two-way bot to a one-way notifier**, on the owner's
+  explicit instruction: *"I don't want the telegram bot to do anything, I
+  just want it to ship out important info."* The **Ingest** workflow — a
+  Telegram Trigger that accepted an uploaded statement or a typed question
+  and answered through the chat agent — is removed from
+  `n8n/generate_workflows.py` entirely; no Telegram Trigger node, no inbound
+  webhook remain anywhere in the export. The three schedule-triggered
+  workflows (Daily brief, Mandate alert, Monthly summary) are unchanged.
+  `DESIGN.md` §10.6, `BUILD_TASKS.md` T14 and `n8n/README.md` all carry
+  correction notes; regenerated `n8n/finpilot-workflows.json` re-passes the
+  secret scan and the every-node-reachable-from-one-trigger check.
+
+- **A live secret was caught in `USER.md` before it was committed.** While
+  editing that file for the T14 change, a real `TELEGRAM_BOT_TOKEN` and a
+  Telegram chat id turned up pasted directly into the document — a tracked,
+  public-repo file, not `.env`. Neither had reached a commit yet. Moved the
+  token into `services/api/.env` (gitignored) and scrubbed both values out
+  of `USER.md` back to instructions-only. Worth being deliberate about
+  going forward: this file is a submission artefact and gets read by anyone
+  who clones the repo.
 
 ## Blockers or ceiling
 

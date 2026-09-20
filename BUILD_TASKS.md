@@ -412,16 +412,16 @@ Implement DESIGN.md §10.5.
 
 ## T14 — n8n workflows · [S] · 60 min · P1
 
-Build the four workflows in DESIGN.md §10.6 in a local Docker n8n, then export.
+Build the workflows in DESIGN.md §10.6 in a local Docker n8n, then export.
 
 - Credentials referenced by name, never inlined: `FinPilot API`, `Telegram Bot`
-- Export all four to `n8n/finpilot-workflows.json`
+- Export to `n8n/finpilot-workflows.json`
 - **Strip every credential value from the exported file before committing** — verify by reading it
 
 **Acceptance criteria**
-- Sending a statement file to the Telegram bot ingests it and replies with a parse summary
-- Sending *"where did I spend the most last month?"* replies with the correct answer
 - Daily-brief workflow produces correct output when triggered manually
+- Mandate-alert workflow fires only on a real unacknowledged silent mandate
+- Monthly-summary workflow produces the month's prose summary
 - The exported JSON imports cleanly into a fresh n8n instance
 - Secret scan returns nothing:
   ```powershell
@@ -436,8 +436,18 @@ Build the four workflows in DESIGN.md §10.6 in a local Docker n8n, then export.
 > from exactly one trigger, no orphans), credentials referenced by name only
 > — but **it has never been imported into a running n8n or exercised against
 > a live Telegram bot.** The secret scan above passes against the committed
-> file. None of the four functional acceptance criteria above are verified;
+> file. None of the functional acceptance criteria above are verified;
 > `n8n/README.md` has the exact steps and is explicit about this gap.
+>
+> **Scope narrowed 20 Sep 2026, on the owner's explicit instruction:** *"I
+> don't want the telegram bot to do anything, I just want it to ship out
+> important info."* The original design's fourth workflow — **Ingest**, a
+> Telegram Trigger that accepted an uploaded statement or an arbitrary typed
+> question and had the bot answer — is removed. It was a second, unrequested
+> conversational front end for the chat agent; the acceptance criteria above
+> now cover only the three push-notification workflows this bot is meant to
+> be. `n8n/generate_workflows.py` no longer emits a Telegram Trigger node or
+> an inbound webhook at all.
 
 ---
 

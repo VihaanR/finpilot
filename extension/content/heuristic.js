@@ -83,6 +83,42 @@ function finpilotNearCheckoutControl(el) {
   return false;
 }
 
+// A real checkout page is full of rupee figures that are not the order
+// total: EMI financing panels ("Total payable over 12 months"), crossed-out
+// MRPs, "you save" banners, delivery fees, recommendation carousels. All of
+// those can legitimately sit close to the checkout button, so "biggest
+// number near the button" (the old rule) can and does latch onto one of
+// them instead of the real total. A labelled total is worth more than
+// proximity; these two lists say which label wins and which disqualifies.
+const FINPILOT_TOTAL_LABEL_RE =
+  /\b(order total|grand total|cart total|subtotal|sub-total|amount payable|payable amount|total amount|to pay|amount to pay)\b/i;
+const FINPILOT_EXCLUDE_RE =
+  /\b(emi|m\.?r\.?p\.?|list price|strike|original price|you save|savings|delivery|shipping|installment|instalment)\b/i;
+
+function finpilotNearbyText(el, hops) {
+  const parts = [el.textContent || ""];
+  let node = el.previousElementSibling;
+  if (node) parts.push(node.textContent || "");
+  // Stop at <body>: climbing past it picks up <head> (title, injected
+  // scripts, meta tags) — content with no relation to what's on screen.
+  let ancestor = el;
+  for (let i = 0; i < hops && ancestor.parentElement && ancestor !== document.body; i++) {
+    ancestor = ancestor.parentElement;
+    if (ancestor === document.body) break;
+    if (ancestor.previousElementSibling) parts.push(ancestor.previousElementSibling.textContent || "");
+  }
+  return parts.join(" ");
+}
+
+function finpilotIsStrikethrough(el) {
+  let node = el;
+  for (let i = 0; i < 3 && node instanceof HTMLElement; i++) {
+    if (getComputedStyle(node).textDecorationLine.includes("line-through")) return true;
+    node = node.parentElement;
+  }
+  return false;
+}
+
 /**
  * Scans the page for rupee amounts and returns the most likely cart/order
  * total in paise, or null if nothing plausible is found.
@@ -95,9 +131,13 @@ function finpilotHeuristicTotal() {
     if (!el || seen.has(el)) return;
     seen.add(el);
     if (!finpilotIsVisible(el)) return;
+    if (finpilotIsStrikethrough(el)) return;
     const paise = finpilotAmountFromElement(el);
     if (paise === null || paise <= 0) return;
-    candidates.push({ paise, el });
+    const context = finpilotNearbyText(el, 3);
+    if (FINPILOT_EXCLUDE_RE.test(context)) return;
+    const labeled = FINPILOT_TOTAL_LABEL_RE.test(context);
+    candidates.push({ paise, el, labeled });
   }
 
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -124,8 +164,14 @@ function finpilotHeuristicTotal() {
   }
   if (candidates.length === 0) return null;
 
-  const nearCheckout = candidates.filter((c) => finpilotNearCheckoutControl(c.el));
-  const pool = nearCheckout.length > 0 ? nearCheckout : candidates;
-  const best = pool.reduce((max, c) => (c.paise > max.paise ? c : max), pool[0]);
+  // A figure explicitly labelled as a total/subtotal beats mere proximity to
+  // the checkout button — that proximity rule is what let an EMI or MRP
+  // panel outrank the real total. Only fall back to "biggest number near the
+  // button" when nothing on the page carries a total-shaped label at all.
+  const labeled = candidates.filter((c) => c.labeled);
+  const pool = labeled.length > 0 ? labeled : candidates;
+  const nearCheckout = pool.filter((c) => finpilotNearCheckoutControl(c.el));
+  const finalPool = nearCheckout.length > 0 ? nearCheckout : pool;
+  const best = finalPool.reduce((max, c) => (c.paise > max.paise ? c : max), finalPool[0]);
   return best.paise;
 }

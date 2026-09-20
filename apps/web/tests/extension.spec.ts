@@ -58,6 +58,15 @@ test.describe("cart-total heuristic", () => {
     expect(await page.evaluate(() => finpilotParseRupees("₹40"))).toBe(4000);
     expect(await page.evaluate(() => finpilotParseRupees("no price here"))).toBeNull();
   });
+
+  test("prefers the labelled order total over a nearby EMI financing figure", async ({ page }) => {
+    await page.goto(fixture("amazon-cart-emi-panel.html"));
+    await loadGuardScripts(page);
+    // The old "biggest ₹ figure near the checkout button" rule picked the
+    // ₹5,93,990 EMI repayment total over the real ₹32,310 order total —
+    // exactly the inaccurate-amount bug reported against a live cart.
+    expect(await page.evaluate(() => finpilotHeuristicTotal())).toBe(3231000);
+  });
 });
 
 test.describe("24-hour cooldown", () => {
@@ -134,6 +143,82 @@ test.describe("interstitial accessibility contract", () => {
     await page.locator("button.finpilot-guard-primary").click();
     await expect(page.locator("#finpilot-guard-overlay")).toHaveCount(0);
     expect(await page.evaluate(() => (window as any).__action)).toBe("wait");
+  });
+});
+
+test.describe("checkout click interception", () => {
+  // amazon.js's old passive MutationObserver approach only ever *displayed*
+  // the interstitial after the fact — it never stopped a click that had
+  // already submitted the form or fired the site's own navigation. This
+  // fixture has a real `<a href="#navigated">` checkout link, so these specs
+  // prove the click itself is what gets blocked, not just that a dialog
+  // shows up somewhere.
+  async function loadAmazonGuard(
+    page: import("@playwright/test").Page,
+    opts: { budget?: Record<string, unknown>; cooldowns?: unknown[] } = {}
+  ) {
+    await page.goto(fixture("amazon-cart-navigable.html"));
+    await page.evaluate(
+      ({ budget, cooldowns }) => {
+        const sent: unknown[] = [];
+        (window as any).__sentMessages = sent;
+        (window as any).chrome = {
+          storage: {
+            local: {
+              get: (_keys: unknown, cb: (v: unknown) => void) => cb({ budget, cooldowns }),
+            },
+          },
+          runtime: {
+            sendMessage: (msg: unknown) => sent.push(msg),
+          },
+        };
+      },
+      { budget: opts.budget ?? null, cooldowns: opts.cooldowns ?? [] }
+    );
+    await page.addScriptTag({ path: path.join(EXT, "content/interstitial.js") });
+    await page.addScriptTag({ path: path.join(EXT, "content/heuristic.js") });
+    await page.addScriptTag({ path: path.join(EXT, "content/click-guard.js") });
+    await page.addScriptTag({ path: path.join(EXT, "content/amazon.js") });
+  }
+
+  test("blocks navigation and shows the interstitial when the cart is over budget", async ({ page }) => {
+    await loadAmazonGuard(page, { budget: { discretionary_paise: 500000 } }); // ₹5,000 left; cart is ₹18,499
+    await page.click("#placeYourOrder");
+    await expect(page.locator("#finpilot-guard-overlay")).toBeVisible();
+    expect(await page.evaluate(() => window.location.hash)).toBe(""); // never navigated
+  });
+
+  test("Continue anyway lets the original click through", async ({ page }) => {
+    await loadAmazonGuard(page, { budget: { discretionary_paise: 500000 } });
+    await page.click("#placeYourOrder");
+    await page.locator(".finpilot-guard-secondary", { hasText: "Continue anyway" }).click();
+    await expect(page.locator("#finpilot-guard-overlay")).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => window.location.hash)).toBe("#navigated");
+  });
+
+  test("Wait 24 hours keeps the click blocked and records a cooldown", async ({ page }) => {
+    await loadAmazonGuard(page, { budget: { discretionary_paise: 500000 } });
+    await page.click("#placeYourOrder");
+    await page.locator(".finpilot-guard-primary", { hasText: "Wait 24 hours" }).click();
+    expect(await page.evaluate(() => window.location.hash)).toBe("");
+    const sent = await page.evaluate(() => (window as any).__sentMessages);
+    expect(sent).toEqual([
+      expect.objectContaining({ type: "record-cooldown", entry: expect.objectContaining({ site: "amazon.in" }) }),
+    ]);
+  });
+
+  test("does not intercept a cart within budget", async ({ page }) => {
+    await loadAmazonGuard(page, { budget: { discretionary_paise: 5000000 } }); // ₹50,000 left
+    await page.click("#placeYourOrder");
+    await expect(page.locator("#finpilot-guard-overlay")).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => window.location.hash)).toBe("#navigated");
+  });
+
+  test("fails open when no budget data is available yet", async ({ page }) => {
+    await loadAmazonGuard(page, { budget: null });
+    await page.click("#placeYourOrder");
+    await expect(page.locator("#finpilot-guard-overlay")).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => window.location.hash)).toBe("#navigated");
   });
 });
 

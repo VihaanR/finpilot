@@ -29,13 +29,13 @@
   "content_scripts": [
     {
       "matches": ["https://*.amazon.in/*"],
-      "js": ["content/interstitial.js", "content/heuristic.js", "content/amazon.js"],
+      "js": ["content/interstitial.js", "content/heuristic.js", "content/click-guard.js", "content/amazon.js"],
       "css": ["content/interstitial.css"],
       "run_at": "document_idle"
     },
     {
       "matches": ["https://*.flipkart.com/*"],
-      "js": ["content/interstitial.js", "content/heuristic.js", "content/flipkart.js"],
+      "js": ["content/interstitial.js", "content/heuristic.js", "content/click-guard.js", "content/flipkart.js"],
       "css": ["content/interstitial.css"],
       "run_at": "document_idle"
     }

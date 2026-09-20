@@ -65,3 +65,18 @@ function finpilotFlipkartScheduleRun() {
 setTimeout(finpilotFlipkartRun, 1200);
 const finpilotFlipkartObserver = new MutationObserver(finpilotFlipkartScheduleRun);
 finpilotFlipkartObserver.observe(document.body, { childList: true, subtree: true });
+
+// The actual guard: intercept the checkout click itself so the page cannot
+// navigate away before the budget check runs. Flipkart has no stable button
+// id (obfuscated classes rotate — see the note at the top of this file), so
+// this relies on the same checkout-word text match the heuristic uses.
+finpilotGuardCheckoutClicks({
+  site: "flipkart.com",
+  isCheckoutTrigger(el) {
+    const label = (el.textContent || el.value || "").trim().toLowerCase();
+    return FINPILOT_CHECKOUT_WORDS.some((w) => label.includes(w));
+  },
+  computeTotal() {
+    return finpilotFlipkartPrimaryTotal() ?? finpilotHeuristicTotal();
+  },
+});

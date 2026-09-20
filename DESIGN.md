@@ -727,13 +727,14 @@ MV3 extension, content scripts on `*://*.amazon.in/*` and `*://*.flipkart.com/*`
 > verified and what still needs a real `amazon.in`/`flipkart.com` cart to
 > confirm.
 
-### 10.6 n8n Telegram agent — P1 · the optional n8n deliverable
+### 10.6 n8n Telegram notifier — P1 · the optional n8n deliverable
 
-Four workflows, exported to `n8n/finpilot-workflows.json`:
+Three workflows, exported to `n8n/finpilot-workflows.json`. All one-way:
+FinPilot pushes information to Telegram on a schedule; the bot never
+receives or acts on an inbound message.
 
 | Workflow | Trigger | Behaviour |
 |---|---|---|
-| **Ingest** | Telegram Trigger | Document → download → `POST /api/ingest/sync` → reply with parse summary. Text → `POST /api/agent/ask/sync` → reply with the answer |
 | **Daily brief** | Schedule, 08:00 IST | `GET /api/dashboard` + `GET /api/radar` → safe-to-spend and anything due today |
 | **Mandate alert** | Schedule, 09:00 IST | `GET /api/radar` → any unacknowledged `SILENT` item due within the banner window → alert |
 | **Monthly summary** | Schedule, 1st at 09:00 | `POST /api/summary/generate` → Telegram |
@@ -757,6 +758,14 @@ Telegram rather than WhatsApp is a deliberate, stated choice: WhatsApp Business 
 > from one trigger, no orphans, secret scan clean) but has never been
 > imported into n8n or run against a live bot. `n8n/README.md` has the gap
 > and the steps to close it.
+>
+> **Narrowed 20 Sep 2026.** This table originally had a fourth workflow,
+> **Ingest** — a Telegram Trigger accepting an uploaded statement or a typed
+> question and replying through the chat agent, i.e. a second conversational
+> front end alongside the web app. Removed on the owner's explicit
+> instruction: the bot should push information the user wants, not act on
+> anything sent to it. `generate_workflows.py` no longer emits a Telegram
+> Trigger node or an inbound webhook.
 
 ### 10.7 Vernacular summary — P0 (translation only)
 
