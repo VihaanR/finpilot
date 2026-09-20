@@ -21,9 +21,16 @@ Every line was run and observed in this session, from the repo root.
 
 **Tests and services**
 
-- `pytest services/api/tests/ evals/` → **327 passed**, zero failures. 25 live
+- `pytest services/api/tests/ evals/` → **326 passed**, zero failures. 25 live
   eval cases skip by default (they need model quota; see below).
 - `cd apps/web && npm run build` → 12/12 static pages, no type errors.
+- `npx playwright test` → **20/20 pass** against the production build with the
+  API live: 8 routes × 2 themes of axe (0 violations), skip-link first on every
+  route, no horizontal scroll at a 640px viewport, and the live chat spec —
+  streamed answer, `aria-busy` toggling, citation chip opening the drawer,
+  Escape returning focus to the chip, 0 axe violations on the answered page.
+- `POST /api/demo/reset` → ledger returns to **936** transactions, clearing a
+  test upload. That is a T12 acceptance criterion, met early.
 - `GET /health` on a live uvicorn → `{"status":"ok"}`, HTTP 200.
 - `import app.models` → **14** SQLAlchemy tables, **31** Pydantic schemas.
 
@@ -127,6 +134,28 @@ afterwards; the schema is empty of data.
   1 `price_hike`, 1 `new_large_merchant`).
 
 ## Completed recently
+
+- **A committed accessibility suite** (`c679e7f`). `apps/web/tests/a11y.spec.ts`
+  replaces the one-off script: 8 routes × 2 themes, skip-link, 200% zoom, the
+  chat keyboard path, and one live chat spec marked `@quota`. It runs against
+  the *production* build, because dev-mode overlays hide the runtime-only bugs
+  it exists to catch. It immediately caught two:
+  1. **The vault page crashed as soon as any AI call had been made** — it read
+     `d.fields`/`d.txn_count` where the API sends `field_types`/`redacted_count`,
+     so `undefined.join` blanked the whole page. It type-checked because
+     `lib/types.ts` is a hand-written mirror that declared the same wrong
+     names. This would have broken the demo: the privacy vault is a USP and it
+     died the moment you used the chat you were demoing.
+  2. **No SSE frame ever reached the browser.** `sse_starlette` separates
+     frames with `
+
+`; both readers split on `
+
+` and matched
+     nothing, yielding zero events while the request looked healthy — 200,
+     body streaming, no error. Chat hung on "Thinking…". The upload page had
+     the identical bug and looked fine only because the upload still
+     succeeded with its progress stages silently missing.
 
 - **T07 — agent layer** (`d9d68db`, `e3904e8`). The 11 tools of DESIGN.md §9.2,
   each hitting the engine and returning `{data, citations}`; a hand-driven
@@ -349,10 +378,9 @@ orchestrator fail-fast rule; everything since has been implemented directly.
   Tier 1 covers 97.2%, so it remains a refinement, not a dependency.
 - **T08 leftovers** — Supabase auth pages and an axe run wired into CI rather
   than a one-off script.
-- **A browser pass over `/chat`.** The route builds and its API path is
-  verified, but axe-core and the keyboard walkthrough have not been run
-  against it; every other route has. T15's axe sweep and the NVDA pass are
-  also still outstanding.
+- **The NVDA pass.** axe-core is a floor, not a ceiling: it cannot judge
+  whether a label is *comprehensible*. Still the only accessibility claim in
+  DESIGN.md §11 with no evidence behind it.
 - **T13** Budget Guard extension, **T14** n8n workflows (both P1).
 - **T16** video + submission.
 
@@ -384,9 +412,9 @@ orchestrator fail-fast rule; everything since has been implemented directly.
   produced prose**, only its pre-computed facts; and no **vision** or
   **embedding-backed document search** path has run, since no pgvector index
   exists.
-- **`/chat` has not been through a browser or axe-core pass.** It compiles and
-  the loop is verified against the API, but the accessibility claim this repo
-  makes for every other route is not yet a claim it can make for this one.
+- ~~`/chat` has not been through a browser or axe-core pass.~~ **Retired** —
+  it is in the committed Playwright suite now, and doing so caught two runtime
+  defects `npm run build` could not see (see Completed recently).
 - **The live eval layer has only ever run its 7-case subset**, on
   `gemini-3.5-flash-lite`. The other 18 cases have never been executed against
   a model.
