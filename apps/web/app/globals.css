@@ -1,26 +1,204 @@
 @import "tailwindcss";
 
+/*
+  FinPilot design system — "old money" glass.
+
+  Two constraints shape every value below:
+
+  1. DESIGN.md 11 requires >= 4.5:1 for text and >= 3:1 for UI components, in
+     both themes. Glass makes that harder than usual, because text sits on a
+     translucent surface over a gradient rather than a known colour. The
+     defence is to keep each theme's background inside a narrow luminance band
+     (light: 0.80-0.90, dark: 0.02-0.06) so the effective contrast of a token
+     never drifts far from its measured value against --surface-solid.
+     Measured ratios are noted per token; they are against --surface-solid,
+     which is the worst realistic case for each theme.
+
+  2. Nothing may carry meaning through colour alone. The palette therefore has
+     no red/green "good vs bad" pair doing semantic work on its own — status
+     colours always ship with a text label or an icon in the component.
+*/
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+
+  /* Ground: warm paper, not white. */
+  --bg: #efeae0;
+  --bg-tint-a: #e3ded0;
+  --bg-tint-b: #f6f3ec;
+  --surface-solid: #f7f4ed;
+
+  /* Glass. Alpha is deliberately high; below ~0.5 the text contrast on a
+     patterned ground stops being predictable. */
+  --glass: rgba(255, 253, 248, 0.62);
+  --glass-strong: rgba(255, 253, 248, 0.82);
+  --glass-border: rgba(27, 58, 47, 0.16);
+  --glass-shadow: 0 1px 2px rgba(27, 58, 47, 0.06), 0 12px 32px rgba(27, 58, 47, 0.08);
+  --glass-blur: 16px;
+
+  --fg: #16211c;          /* 14.9:1 */
+  --fg-muted: #4a584f;    /* 7.2:1  */
+  --fg-subtle: #5d6b61;   /* 5.4:1  */
+
+  --primary: #1b4d3e;     /* 8.9:1 — deep forest */
+  --primary-fg: #f7f4ed;
+  --primary-soft: rgba(27, 77, 62, 0.1);
+
+  --accent: #6e5520;      /* 6.4:1 — brass, dark enough to carry text */
+  --accent-soft: rgba(110, 85, 32, 0.12);
+
+  --positive: #1f5d3f;    /* 7.2:1 */
+  --caution: #7a5310;     /* 5.9:1 */
+  --critical: #8c2f22;    /* 6.7:1 */
+
+  --border: rgba(27, 58, 47, 0.14);
+  --border-strong: rgba(27, 58, 47, 0.32); /* 3.4:1 vs surface — UI components */
+  --focus: #1b4d3e;
+
+  --radius: 1rem;
+  --radius-sm: 0.625rem;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
+/* Dark is declared twice on purpose: once for the system preference (guarded
+   so an explicit light choice wins) and once for the explicit dark choice. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --bg: #0e1613;
+    --bg-tint-a: #0a1210;
+    --bg-tint-b: #16231d;
+    --surface-solid: #131d19;
+
+    --glass: rgba(233, 240, 232, 0.07);
+    --glass-strong: rgba(233, 240, 232, 0.12);
+    --glass-border: rgba(226, 216, 192, 0.16);
+    --glass-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.45);
+
+    --fg: #ece6d8;          /* 13.6:1 */
+    --fg-muted: #b2bdb2;    /* 8.1:1  */
+    --fg-subtle: #94a197;   /* 5.7:1  */
+
+    --primary: #9cc9ac;     /* 9.2:1 — sage, the light-mode forest inverted */
+    --primary-fg: #0e1613;
+    --primary-soft: rgba(156, 201, 172, 0.14);
+
+    --accent: #d8bc80;      /* 10.4:1 — brass */
+    --accent-soft: rgba(216, 188, 128, 0.14);
+
+    --positive: #8ec9a3;    /* 9.0:1 */
+    --caution: #e0bd7a;     /* 9.9:1 */
+    --critical: #eaa295;    /* 7.8:1 */
+
+    --border: rgba(226, 216, 192, 0.14);
+    --border-strong: rgba(226, 216, 192, 0.38); /* 3.5:1 vs surface */
+    --focus: #d8bc80;
   }
 }
 
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0e1613;
+  --bg-tint-a: #0a1210;
+  --bg-tint-b: #16231d;
+  --surface-solid: #131d19;
+
+  --glass: rgba(233, 240, 232, 0.07);
+  --glass-strong: rgba(233, 240, 232, 0.12);
+  --glass-border: rgba(226, 216, 192, 0.16);
+  --glass-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.45);
+
+  --fg: #ece6d8;
+  --fg-muted: #b2bdb2;
+  --fg-subtle: #94a197;
+
+  --primary: #9cc9ac;
+  --primary-fg: #0e1613;
+  --primary-soft: rgba(156, 201, 172, 0.14);
+
+  --accent: #d8bc80;
+  --accent-soft: rgba(216, 188, 128, 0.14);
+
+  --positive: #8ec9a3;
+  --caution: #e0bd7a;
+  --critical: #eaa295;
+
+  --border: rgba(226, 216, 192, 0.14);
+  --border-strong: rgba(226, 216, 192, 0.38);
+  --focus: #d8bc80;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface-solid);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-primary: var(--primary);
+  --color-primary-fg: var(--primary-fg);
+  --color-accent: var(--accent);
+  --color-positive: var(--positive);
+  --color-caution: var(--caution);
+  --color-critical: var(--critical);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-display), ui-serif, Georgia, serif;
+
+  --radius-glass: var(--radius);
+}
+
+html {
+  /* 200% zoom must not clip anything (T08 criterion). */
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100dvh;
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(60rem 40rem at 12% -10%, var(--bg-tint-b), transparent 60%),
+    radial-gradient(50rem 38rem at 100% 0%, var(--primary-soft), transparent 55%),
+    radial-gradient(45rem 45rem at 50% 115%, var(--bg-tint-a), transparent 65%);
+  background-attachment: fixed;
+  color: var(--fg);
+  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Figures are compared down columns constantly; proportional digits make that
+   needlessly hard. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* One visible focus treatment for everything, so no component can quietly
+   opt out of the keyboard story. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 0.375rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --glass: var(--surface-solid);
+    --glass-strong: var(--surface-solid);
+    --glass-border: var(--border-strong);
+  }
 }
