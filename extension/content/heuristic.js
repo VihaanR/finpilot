@@ -29,7 +29,46 @@ function finpilotParseRupees(text) {
 function finpilotIsVisible(el) {
   if (!(el instanceof HTMLElement)) return false;
   const rect = el.getBoundingClientRect();
-  return rect.width > 0 && rect.height > 0 && el.offsetParent !== null;
+  if (rect.width <= 0 || rect.height <= 0) return false;
+  // `offsetParent === null` is NOT a visibility test: it is also null for
+  // every `position: fixed` element, which is exactly what a sticky order
+  // summary or a bottom checkout bar usually is.
+  const style = getComputedStyle(el);
+  return style.visibility !== "hidden" && style.display !== "none";
+}
+
+/**
+ * Reads a rupee amount from `el`'s combined text.
+ *
+ * Retailers routinely split one price across several elements — Amazon ships
+ * the symbol, the whole part, the decimal point and the fraction as four
+ * separate spans — so no single text node holds "₹" beside its digits and a
+ * per-text-node parse finds nothing at all.
+ *
+ * The trap in reading the combined text instead is that the decimal point is
+ * itself an element, and when a retailer omits it "40" and "00" concatenate
+ * into ₹4,000 — a 100x overestimate that fires the interstitial on a delivery
+ * fee. So when the combined text carries no decimal point and the final
+ * fragment is exactly two digits, those two digits are read as the fraction.
+ */
+function finpilotAmountFromElement(el) {
+  const text = (el.textContent || "").replace(/\s+/g, " ");
+  const paise = finpilotParseRupees(text);
+  if (paise === null) return null;
+  if (text.includes(".")) return paise;
+
+  const fragments = [];
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let node;
+  while ((node = walker.nextNode())) {
+    const t = (node.textContent || "").trim();
+    if (t) fragments.push(t);
+  }
+  const last = fragments[fragments.length - 1];
+  if (fragments.length > 1 && /^\d{2}$/.test(last) && paise >= 100 * 100) {
+    return Math.round(paise / 100);
+  }
+  return paise;
 }
 
 function finpilotNearCheckoutControl(el) {
@@ -50,16 +89,38 @@ function finpilotNearCheckoutControl(el) {
  */
 function finpilotHeuristicTotal() {
   const candidates = [];
+  const seen = new Set();
+
+  function consider(el) {
+    if (!el || seen.has(el)) return;
+    seen.add(el);
+    if (!finpilotIsVisible(el)) return;
+    const paise = finpilotAmountFromElement(el);
+    if (paise === null || paise <= 0) return;
+    candidates.push({ paise, el });
+  }
+
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   let node;
   while ((node = walker.nextNode())) {
     const text = node.textContent;
     if (!text || !text.includes("₹")) continue;
     const el = node.parentElement;
-    if (!el || !finpilotIsVisible(el)) continue;
-    const paise = finpilotParseRupees(text);
-    if (paise === null || paise <= 0) continue;
-    candidates.push({ paise, el });
+    if (!el) continue;
+    if (finpilotParseRupees(text) !== null) {
+      consider(el);
+      continue;
+    }
+    // The symbol sits alone in its own element: climb to the nearest
+    // ancestor that also carries digits, which is the price wrapper.
+    let ancestor = el;
+    while (ancestor && ancestor !== document.body) {
+      if (/\d/.test(ancestor.textContent || "")) {
+        consider(ancestor);
+        break;
+      }
+      ancestor = ancestor.parentElement;
+    }
   }
   if (candidates.length === 0) return null;
 

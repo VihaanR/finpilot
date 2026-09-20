@@ -9,6 +9,25 @@ function finpilotFormatRupees(paise) {
   return "₹" + rupees.toLocaleString("en-IN");
 }
 
+const FINPILOT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Resolves true when this site is inside the 24-hour window the user asked
+ * for by clicking "Wait 24 hours".
+ *
+ * Without this the button is a lie: it wrote a cooldown record that nothing
+ * ever read, so the very next page load showed the same dialog again.
+ */
+function finpilotInCooldown(site) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get("cooldowns", ({ cooldowns }) => {
+      const list = Array.isArray(cooldowns) ? cooldowns : [];
+      const cutoff = Date.now() - FINPILOT_COOLDOWN_MS;
+      resolve(list.some((c) => c && c.site === site && c.created_at > cutoff));
+    });
+  });
+}
+
 /**
  * Shows the interstitial. `onAction` receives "continue" | "wait" | "dismiss".
  * Returns nothing; the dialog removes itself on any action or Escape.

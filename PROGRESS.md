@@ -100,9 +100,12 @@ against) fixed it — the successful build shows `cp311` wheels throughout.
 - `pytest services/api/tests/ evals/` → **326 passed**, zero failures. 25 live
   eval cases skip by default (they need model quota; see below).
 - `cd apps/web && npm run build` → 12/12 static pages, no type errors.
-- `npx playwright test` → **20/20 pass** against the production build with the
-  API live: 8 routes × 2 themes of axe (0 violations), skip-link first on every
-  route, no horizontal scroll at a 640px viewport, and the live chat spec —
+- `npx playwright test --grep-invert @quota` → **30/30 pass** against the
+  production build with the API live: 8 routes × 2 themes of axe (0
+  violations), skip-link first on every route, no horizontal scroll at a 640px
+  viewport, and 11 Budget Guard specs (cart-total parser, 24-hour cooldown,
+  interstitial a11y contract). The live chat spec is the `@quota` one excluded
+  here; with it, 31/31 —
   streamed answer, `aria-busy` toggling, citation chip opening the drawer,
   Escape returning focus to the chip, 0 axe violations on the answered page.
 - `POST /api/demo/reset` → ledger returns to **936** transactions, clearing a
@@ -525,6 +528,43 @@ afterwards; the schema is empty of data.
   recurring series" was unsatisfiable alongside T03's required seed contents;
   annotated with the measured figures. `CLAUDE.md` and this file added.
 
+- **Budget Guard hardened, and its verification committed.** The extension's
+  own check had been a one-off script that was never committed, so nothing
+  guarded the cart-total parser. Replacing it with
+  `apps/web/tests/extension.spec.ts` (11 specs, driving the real
+  `extension/content/*.js` sources — no extension install, no API, no web
+  server) immediately found three genuine defects, none of which the two
+  existing fixtures could surface:
+  1. **The heuristic found nothing at all on a real Amazon cart.** Amazon
+     ships a price as four elements (symbol, whole, decimal, fraction), so
+     no text node holds "₹" beside its digits; both committed fixtures used
+     whole-text prices and so never exercised it. It now climbs to the
+     nearest ancestor carrying digits.
+  2. **The obvious fix overestimates by 100x.** Reading the combined text
+     turns "₹" + "40" + "00" into ₹4,000 when a retailer omits the decimal
+     element — an interstitial fired by a delivery fee. A trailing two-digit
+     fragment with no decimal point in the text is now read as the fraction.
+  3. **`finpilotIsVisible` rejected every `position: fixed` element.**
+     `offsetParent === null` is not a visibility test; it is also null for
+     fixed positioning, which is what a sticky order summary or a bottom
+     checkout bar usually is.
+
+  Also: **"Wait 24 hours" was a lie.** It wrote a cooldown record that
+  nothing ever read, so the next page load showed the same dialog again. The
+  content scripts now consult it, per retailer, with a real 24-hour expiry.
+
+  `pytest services/api/tests/ evals/` stayed green (326 passed, 25 live eval
+  cases skipped) and the full Playwright suite is **30/30** with the API live
+  — 19 a11y specs plus the 11 new ones.
+
+- **CI wired** (`.github/workflows/ci.yml`). Two jobs: pytest on the
+  interpreter `services/api/.python-version` pins, and a browser job that
+  boots the API on 8001, builds the web app with a matching
+  `NEXT_PUBLIC_API_URL` (baked in at build time, so it has to be set there)
+  and runs Playwright with `--grep-invert @quota`. That closes the T08
+  leftover and means the axe floor is enforced on every push rather than
+  whenever someone remembers to run a script.
+
 ## Blockers or ceiling
 
 **External — needs a human, cannot be fixed by writing code:**
@@ -583,8 +623,13 @@ orchestrator fail-fast rule; everything since has been implemented directly.
   accident; the 7-case live subset covers the acceptance criteria.
 - **T05 tier-2** — the batch classifier is written and has still never run.
   Tier 1 covers 97.2%, so it remains a refinement, not a dependency.
-- **T08 leftovers** — Supabase auth pages and an axe run wired into CI rather
-  than a one-off script.
+- ~~T08 leftovers — an axe run wired into CI rather than a one-off script.~~
+  **Done 20 Sep 2026** — `.github/workflows/ci.yml` runs `pytest
+  services/api/tests/ evals/` and, in a second job, boots the API, builds the
+  web app and runs the whole Playwright suite (axe on 8 routes x 2 themes,
+  plus the new extension specs) with `--grep-invert @quota` so a push never
+  spends model quota. Supabase auth pages remain undone and are deliberate —
+  this build has no auth (USER.md §8e).
 - **The NVDA pass.** axe-core is a floor, not a ceiling: it cannot judge
   whether a label is *comprehensible*. Still the only accessibility claim in
   DESIGN.md §11 with no evidence behind it.
@@ -600,10 +645,14 @@ orchestrator fail-fast rule; everything since has been implemented directly.
 
 - **The Budget Guard extension has never seen a real Amazon.in or Flipkart
   cart.** Its cart-total parsing (primary selectors and the ₹-numeric
-  heuristic) and the interstitial's accessibility contract are verified
-  against fixture pages in `extension/test-fixtures/`; the DOM of an actual
-  retailer page, with real markup and real ad/tracking scripts running
-  alongside it, is not something this session could exercise.
+  heuristic), the 24-hour cooldown and the interstitial's accessibility
+  contract are now covered by a **committed** suite
+  (`apps/web/tests/extension.spec.ts`, 11 specs) against fixture pages in
+  `extension/test-fixtures/` — including one reproducing Amazon's real
+  split symbol/whole/decimal/fraction price markup, which is what exposed
+  the heuristic returning `null` on a live cart. The DOM of an actual
+  retailer page, with real ad and tracking scripts running alongside it, is
+  still not something this session could exercise.
 - **The n8n workflow export has never been imported into a running n8n or
   run against a live Telegram bot.** `n8n/finpilot-workflows.json` is
   structurally valid and points at the right API routes, but every one of

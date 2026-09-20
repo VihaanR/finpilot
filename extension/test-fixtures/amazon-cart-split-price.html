@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>Mock Amazon Cart, Split Price Markup</title></head>
+  <body>
+    <!-- Amazon's real price markup splits the symbol, the whole part, the
+         decimal point and the fraction into separate elements, so no single
+         text node ever contains "₹" beside its digits. Every known selector
+         is absent here, so only the heuristic can find the total — the
+         combination the other two fixtures never exercise.
+
+         The second block drops the decimal element entirely, which is the
+         shape that would make a naive textContent parse read ₹40.00 as
+         ₹4,000 and fire the interstitial on a delivery fee. -->
+    <div class="totally-renamed-block">
+      <span>Order total</span>
+      <span class="a-price"
+        ><span class="a-price-symbol">₹</span
+        ><span class="a-price-whole">9,999<span class="a-price-decimal">.</span></span
+        ><span class="a-price-fraction">00</span></span
+      >
+    </div>
+    <div>
+      Delivery
+      <span class="a-price"
+        ><span class="a-price-symbol">₹</span
+        ><span class="a-price-whole">40</span
+        ><span class="a-price-fraction">00</span></span
+      >
+    </div>
+    <button type="button">Proceed to Buy</button>
+  </body>
+</html>

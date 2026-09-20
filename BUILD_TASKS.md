@@ -368,9 +368,9 @@ Implement DESIGN.md §10.5.
 > signed-snapshot handshake were dropped: this build's API has no auth
 > (USER.md §8e), so the extension just fetches `/api/dashboard` directly
 > instead, same data, one fewer moving part. "Wait 24 hours" writes a local
-> cooldown record (visible in the popup) but does not yet enqueue a real
-> Telegram nudge — that needs T14's bot token, which this session didn't
-> have.
+> cooldown record (visible in the popup) and suppresses the interstitial for
+> that retailer for 24 hours, but does not yet enqueue a real Telegram nudge
+> — that needs T14's bot token, which this session didn't have.
 >
 > Verified, not just written: loads unpacked with zero manifest/console
 > errors (Playwright-driven smoke test); the background service worker
@@ -382,6 +382,31 @@ Implement DESIGN.md §10.5.
 > selector deliberately absent to prove the heuristic alone still finds the
 > total. **Never tested against a real `amazon.in` or `flipkart.com` cart** —
 > that needs a live account and cart, which is a manual, owner-side check.
+>
+> **Hardened 20 Sep 2026, after the one-off smoke script was replaced by a
+> committed suite** (`apps/web/tests/extension.spec.ts`, 11 specs driving the
+> real `content/*.js` sources against the fixtures — no extension install,
+> no API, no web server, since the parser and the interstitial are both pure
+> DOM code). Writing it down as a test immediately caught two defects the
+> original fixtures could not:
+> 1. **The heuristic returned `null` on a real Amazon cart.** Amazon ships a
+>    price as four separate elements — symbol, whole, decimal point,
+>    fraction — so no single text node ever holds "₹" beside its digits, and
+>    a per-text-node scan finds nothing. Both committed fixtures used
+>    whole-text prices, so the gap was invisible. The heuristic now climbs to
+>    the nearest ancestor carrying digits;
+>    `test-fixtures/amazon-cart-split-price.html` reproduces the real markup.
+> 2. **Reading the combined text naively overestimates by 100x** when a
+>    retailer omits the decimal element: "₹" + "40" + "00" concatenates to
+>    ₹4,000 and fires the interstitial on a delivery fee. A trailing
+>    two-digit fragment with no decimal point in the text is now read as the
+>    fraction.
+>
+> Also fixed: `finpilotIsVisible` rejected every `position: fixed` element
+> (`offsetParent` is null for those, which is not a visibility test) — that
+> is what a sticky order summary or bottom checkout bar usually is; and
+> "Wait 24 hours" wrote a cooldown record that nothing ever read, so the next
+> page load showed the same dialog again.
 
 ---
 

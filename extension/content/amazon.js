@@ -42,10 +42,11 @@ function finpilotAmazonRun() {
   const cartPaise = primary ?? finpilotHeuristicTotal();
   if (!cartPaise) return;
 
-  chrome.storage.local.get("budget", ({ budget }) => {
+  chrome.storage.local.get("budget", async ({ budget }) => {
     const discretionary = budget?.discretionary_paise;
     if (discretionary == null || budget?.error) return; // fail open, never block on our own error
     if (cartPaise <= discretionary) return;
+    if (await finpilotInCooldown("amazon.in")) return; // user already chose to wait
 
     window.__finpilotGuardShown = true;
     finpilotShowInterstitial({
