@@ -61,6 +61,15 @@ class Settings(BaseSettings):
     bhashini_user_id: str = ""
     bhashini_api_key: str = ""
 
+    #: Gmail-connected ingestion (Data Vault "Connect Gmail" panel). Separate
+    #: from `gemini_api_key` — this is an OAuth *client* (Cloud Console ->
+    #: APIs & Services -> Credentials -> OAuth client ID -> Web application),
+    #: not an API key, and needs the Gmail API enabled plus this redirect URI
+    #: registered on the client.
+    google_oauth_client_id: str = ""
+    google_oauth_client_secret: str = ""
+    google_oauth_redirect_uri: str = "http://localhost:8001/api/email/callback"
+
     # --- Behaviour ---
     retention_days: int = 90
     max_upload_mb: int = 20

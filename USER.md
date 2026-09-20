@@ -16,6 +16,7 @@ keys, migrations, gotchas, environment reference — lives in `PROGRESS.md`.
 | §3 | Record the video | 60 min | no |
 | §4 | Submit | 15 min | no |
 | §5 | After results are announced | 5 min | no |
+| §6 | Connect Gmail (Data Vault) | 10 min | **yes — not part of the submission scope** |
 
 ---
 
@@ -75,7 +76,13 @@ docker run -d --name n8n -p 5678:5678 -v n8n_data:/home/node/.n8n docker.n8n.io/
 
 Open `http://localhost:5678` and create the local owner account (local only).
 
-1. **Workflows → Import from File** → `n8n/finpilot-workflows.json` (all three)
+1. **Workflows → Import from File**, once per file — `n8n/workflows/01-daily-brief.json`,
+   `02-mandate-alert.json`, `03-monthly-summary.json`. Don't point this at
+   `n8n/finpilot-workflows.json`: that one file holds all three as a JSON
+   array, and n8n's file-import dialog only reads a single workflow object,
+   so it fails with *"the imported data does not contain valid workflow data
+   ('nodes' and 'connections' are missing)"* — that array file is generated
+   only for reference/the CLI import path, not this dialog.
 2. **Credentials → Telegram API** → paste the bot token → name it exactly **`Telegram Bot`**
 3. **Credentials → Header Auth** → Name `Authorization`, Value `Bearer anything`
    → name it exactly **`FinPilot API`** (this API has no auth enforced)
@@ -91,11 +98,13 @@ Open `http://localhost:5678` and create the local owner account (local only).
 
 ### 2c. Re-export before submitting
 
-**Workflows → Select all → Download**, save over `n8n/finpilot-workflows.json`,
-then confirm nothing leaked:
+**Workflows → Select all → Download**, save over `n8n/finpilot-workflows.json`
+(this is the one file worth attaching to the submission — the individual
+`n8n/workflows/*.json` files are only for re-importing), then confirm nothing
+leaked:
 
 ```powershell
-Select-String -Path n8n\finpilot-workflows.json -Pattern "sk-ant|eyJ|bot[0-9]{8,}|service_role"
+Select-String -Path n8n\finpilot-workflows.json,n8n\workflows\*.json -Pattern "sk-ant|eyJ|bot[0-9]{8,}|service_role"
 ```
 
 No output means you're clean.
@@ -164,6 +173,35 @@ Field-by-field answers in `SUBMISSION.md`.
 
 *(There's no demo account to disable — this build has no login. See
 PROGRESS.md.)*
+
+---
+
+## 6. Connect Gmail (Data Vault) — 10 min, optional
+
+A new panel at the top of the Data Vault: connect a Gmail account and pull
+HDFC transaction-alert emails in as transactions, no manual upload needed.
+Built after the original submission scope — nice to have in the recording,
+not required for it.
+
+1. **Google Cloud Console** (same project as `GEMINI_API_KEY` works fine) →
+   APIs & Services → **enable the Gmail API**
+2. APIs & Services → Credentials → **Create credentials → OAuth client ID**
+   → Application type **Web application**
+3. Add an **Authorized redirect URI**: `http://localhost:8001/api/email/callback`
+   (and your Render URL + `/api/email/callback` if you want this live too)
+4. OAuth consent screen → **Audience** → while it's in Testing mode, add your
+   own Google account under **Test users** — otherwise Google refuses the
+   login with "app not verified" and no way past it
+5. Copy the **Client ID** and **Client secret** into `services/api/.env`:
+   `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`
+6. Restart the API, open the Data Vault, click **Connect Gmail**, approve the
+   Google consent screen, then **Sync now**
+
+Only HDFC's own transaction-alert emails (`alerts@hdfcbank.bank.in`) are
+read, and only the one verified debit-alert wording is parsed — anything
+else is skipped and counted, never guessed at. If you don't bank with HDFC
+or don't want to set up an OAuth client, skip this entirely; nothing else in
+the product depends on it.
 
 ---
 

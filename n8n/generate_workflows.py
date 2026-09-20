@@ -217,7 +217,32 @@ wf4 = workflow(
 )
 
 out = [wf2, wf3, wf4]
+
+# n8n's own "Workflows -> Import from File" reads exactly one workflow object
+# per file -- given a top-level array it reports "the imported data does not
+# contain valid workflow data ('nodes' and 'connections' are missing)",
+# because it looked for those keys on the array itself, not on an element
+# inside it. The array form is only valid for the n8n CLI's
+# `import:workflow --separate --input=<directory>`, which explicitly expects
+# one file per workflow -- never a single multi-workflow file either.
+#
+# So: three separate single-workflow files for the UI import path (what
+# USER.md's instructions actually walk through), plus the combined array
+# kept for the CLI path and as the one file the secret-scan grep checks.
+import os
+
+os.makedirs("workflows", exist_ok=True)
+individual_files = {
+    "workflows/01-daily-brief.json": wf2,
+    "workflows/02-mandate-alert.json": wf3,
+    "workflows/03-monthly-summary.json": wf4,
+}
+for individual_path, wf in individual_files.items():
+    with open(individual_path, "w", encoding="utf-8") as f:
+        json.dump(wf, f, indent=2, ensure_ascii=False)
+    print("wrote", individual_path)
+
 path = "finpilot-workflows.json"
 with open(path, "w", encoding="utf-8") as f:
     json.dump(out, f, indent=2, ensure_ascii=False)
-print("wrote", path)
+print("wrote", path, "(combined -- CLI import only, not the UI's Import from File)")

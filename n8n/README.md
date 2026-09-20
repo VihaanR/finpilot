@@ -1,9 +1,10 @@
 # FinPilot n8n workflows
 
-Three workflows (BUILD_TASKS.md T14), exported to `finpilot-workflows.json`.
-All three are one-way: FinPilot pushes information to your Telegram chat on
-a schedule. There is no inbound side — the bot never receives or acts on a
-message from you.
+Three workflows (BUILD_TASKS.md T14), one file each in `workflows/` (import
+these — see "Importing" below for why), plus a combined
+`finpilot-workflows.json` for the CLI path. All three are one-way: FinPilot
+pushes information to your Telegram chat on a schedule. There is no inbound
+side — the bot never receives or acts on a message from you.
 
 | Workflow | Trigger | Behaviour |
 |---|---|---|
@@ -56,8 +57,17 @@ need to actually be run once Docker and a bot token exist.
      but never checked — see USER.md), so any header name/value works today;
      this credential exists so nothing needs to change here if that gets
      enforced later. Header name `Authorization`, value `Bearer <anything>`.
-4. **Import**: n8n → Workflows → Import from File → `finpilot-workflows.json`.
-   It imports all three at once (n8n's multi-workflow array format).
+4. **Import**: n8n → Workflows → **Import from File**, once per file, for
+   each of `workflows/01-daily-brief.json`, `workflows/02-mandate-alert.json`,
+   `workflows/03-monthly-summary.json`. Do **not** import
+   `finpilot-workflows.json` this way — that file is a JSON *array* of all
+   three workflows, and n8n's own file-import dialog reads exactly one
+   workflow object per file. Pointing it at the array produces exactly the
+   error a real run hit: *"The imported data does not contain valid workflow
+   data ('nodes' and 'connections' are missing)"* — it looked for those keys
+   on the array itself, one level too high. The array file is only valid for
+   n8n's CLI (`n8n import:workflow --input=finpilot-workflows.json`), which
+   this setup doesn't otherwise use.
 5. **Fix the three placeholders**: every workflow here is schedule-triggered,
    so none of them has an inbound message to reply to — each sends to a
    fixed chat instead. Open each, find the Telegram node's **Chat ID** field
@@ -67,12 +77,14 @@ need to actually be run once Docker and a bot token exist.
 6. **Activate** each workflow (the toggle in the top-right of its editor).
 7. Test each workflow with "Execute Workflow" in its editor (doesn't wait for
    the schedule) and confirm the message arrives in Telegram, then re-export
-   and confirm the re-exported file still passes the secret scan below.
+   (Workflows → select all three → Download saves one array file — see
+   USER.md §2c) and confirm the re-exported file still passes the secret scan
+   below.
 
 ## Secret scan (T14 acceptance criterion)
 
 ```bash
-grep -inE "sk-ant|eyJ|bot[0-9]{8,}|service_role" n8n/finpilot-workflows.json
+grep -inE "sk-ant|eyJ|bot[0-9]{8,}|service_role" n8n/finpilot-workflows.json n8n/workflows/*.json
 ```
 
 Returns nothing as committed — credentials are referenced by name

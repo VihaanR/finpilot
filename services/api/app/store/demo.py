@@ -28,7 +28,9 @@ OUTPUT_DIR = SEED_DIR / "output"
 DEMO_SEED = 42
 DEMO_AS_OF = "2026-09-19"
 
-CONSENT_VERSION = "1.0.0"
+#: Bumped from 1.0.0 when Gmail-connected ingestion added Google (Gmail API)
+#: as a third party — a changed artefact requires re-consent (DESIGN.md 10.2).
+CONSENT_VERSION = "1.1.0"
 #: Scopes the vault can grant or revoke independently. Revoking `ai_processing`
 #: must leave the deterministic engine working (DESIGN.md 10.2).
 CONSENT_SCOPES = ("data_processing", "ai_processing")

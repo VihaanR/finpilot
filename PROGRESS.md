@@ -214,6 +214,30 @@ afterwards; the schema is empty of data.
 
 ## Completed recently
 
+- **Gmail-connected ingestion** — a "Connect Gmail" panel at the top of the
+  Data Vault, added after the original submission scope (see USER.md §6 for
+  the owner-side OAuth client setup this needs before it does anything).
+  One HDFC transaction-alert email becomes one transaction through a new
+  fixed-regex adapter (`ingest/adapters/hdfc_email.py`, verified against a
+  real sample), reusing the same normalise → classify → dedupe → insert tail
+  every other ingestion source shares (`ingest/pipeline.py::
+  ingest_parsed_rows`) — but reached directly rather than through
+  `registry.parse`, specifically so an email that doesn't match falls
+  through to a plain "skipped" count instead of the LLM-fallback adapter,
+  which would otherwise spend Gemini's 20-requests/day quota (see "Model
+  quotas" below) reading marketing email and OTP alerts. Single stored
+  connection, no per-visitor auth — consistent with the rest of the product
+  having no login. The refresh token lives in its own `email_connections`
+  table, deliberately outside `_USER_TABLES` so it can never appear in a
+  DPDP export. Consent artefact bumped to `CONSENT_VERSION = "1.1.0"` to
+  list Google (Gmail API) as a new third party.
+
+  Also fixed in passing: `apps/web/lib/types.ts` declared
+  `storage_inventory` rows as `{ rows: number }`; the API has always
+  returned `row_count`. The vault's "What is stored" table's Rows column
+  has been silently rendering blank in production — the exact class of bug
+  the file's own comment above `disclosures` already warns about.
+
 - **T17 — the agentic dashboard panel, agentic goals, and extension
   telemetry** (`f546e1c`). The agent could answer questions but not *do*
   anything, and goals could not be created at all — for a hackathon judged on

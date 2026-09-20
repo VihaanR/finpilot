@@ -23,7 +23,12 @@ router = APIRouter(prefix="/api/vault", tags=["vault"])
 CONSENT_ARTEFACT: dict[str, Any] = {
     "version": CONSENT_VERSION,
     "purpose": "Personal finance analysis and insight generation",
-    "data_types": ["Transaction records", "Account metadata", "Uploaded bills"],
+    "data_types": [
+        "Transaction records",
+        "Account metadata",
+        "Uploaded bills",
+        "HDFC transaction-alert emails (if Gmail is connected)",
+    ],
     "processing": [
         "Categorisation",
         "Recurrence detection",
@@ -45,6 +50,15 @@ CONSENT_ARTEFACT: dict[str, Any] = {
             "name": "Supabase",
             "role": "Storage",
             "region": "India region where available",
+        },
+        {
+            "name": "Google (Gmail API)",
+            "role": (
+                "Read-only access to HDFC transaction-alert emails, only if "
+                "you connect an account from this page. No AI processing — "
+                "a fixed parser, not a model, reads these emails."
+            ),
+            "region": "Global",
         },
     ],
     "retention": "{0} days from upload, then automatic deletion".format(

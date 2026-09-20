@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { GlassPanel, SectionHeading } from "@/components/ui/Glass";
 import { Button } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Badge";
@@ -8,13 +8,83 @@ import { ErrorPanel, LoadingPanel } from "@/components/ui/States";
 import { API_BASE, api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { formatDate, titleCase } from "@/lib/format";
-import type { Vault } from "@/lib/types";
+import type { EmailStatus, Vault } from "@/lib/types";
 
 export default function VaultPage() {
   const { data, error, loading, reload } = useApi<Vault>("/api/vault");
+  const {
+    data: emailStatus,
+    error: emailError,
+    loading: emailLoading,
+    reload: reloadEmailStatus,
+  } = useApi<EmailStatus>("/api/email/status");
   const [notice, setNotice] = useState("");
   const [confirm, setConfirm] = useState("");
   const [erasing, setErasing] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  // The OAuth round trip lands back here via /api/email/callback's redirect.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get("email_connected");
+    const oauthError = params.get("email_error");
+    if (!connected && !oauthError) return;
+    setNotice(
+      connected
+        ? "Gmail connected. Click Sync now to pull in any alert emails."
+        : `Could not connect Gmail: ${oauthError}`,
+    );
+    const url = new URL(window.location.href);
+    url.searchParams.delete("email_connected");
+    url.searchParams.delete("email_error");
+    window.history.replaceState({}, "", url.toString());
+    reloadEmailStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function connectGmail() {
+    setConnecting(true);
+    try {
+      const { auth_url } = await api.post<{ auth_url: string }>("/api/email/connect");
+      window.location.href = auth_url;
+    } catch (e) {
+      setNotice((e as Error).message);
+      setConnecting(false);
+    }
+  }
+
+  async function disconnectGmail() {
+    try {
+      await api.post("/api/email/disconnect");
+      setNotice("Gmail disconnected.");
+      reloadEmailStatus();
+    } catch (e) {
+      setNotice((e as Error).message);
+    }
+  }
+
+  async function syncGmail() {
+    setSyncing(true);
+    try {
+      const result = await api.post<{
+        fetched: number;
+        inserted: number;
+        duplicates: number;
+        skipped: number;
+      }>("/api/email/sync");
+      setNotice(
+        `Checked ${result.fetched} email(s) — added ${result.inserted}, ` +
+          `${result.duplicates} already known, ${result.skipped} not recognised.`,
+      );
+      reloadEmailStatus();
+      reload();
+    } catch (e) {
+      setNotice((e as Error).message);
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   async function setScope(scope: string, granted: boolean) {
     try {
@@ -62,6 +132,47 @@ export default function VaultPage() {
       <p aria-live="polite" className="text-sm text-[var(--positive)]">
         {notice}
       </p>
+
+      <GlassPanel as="section" className="p-6">
+        <SectionHeading>Connect Gmail</SectionHeading>
+        <p className="text-sm text-[var(--fg-muted)]">
+          Pulls in HDFC transaction-alert emails as they arrive — the same
+          categorisation and duplicate checks as an uploaded statement, no AI
+          model involved. Read-only, and only HDFC&rsquo;s alert emails are
+          ever read.
+        </p>
+
+        {emailError ? <ErrorPanel message={emailError} /> : null}
+
+        {emailLoading && !emailStatus ? (
+          <p className="mt-3 text-sm text-[var(--fg-subtle)]">Checking…</p>
+        ) : emailStatus && !emailStatus.configured ? (
+          <p className="mt-3 text-sm text-[var(--fg-subtle)]">
+            Not configured on this deployment — GOOGLE_OAUTH_CLIENT_ID is unset.
+          </p>
+        ) : emailStatus?.connected ? (
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <Pill tone="info">Connected: {emailStatus.email_address}</Pill>
+            <span className="text-xs text-[var(--fg-subtle)]">
+              {emailStatus.last_synced_at
+                ? `Last synced ${formatDate(emailStatus.last_synced_at.slice(0, 10))}`
+                : "Never synced"}
+            </span>
+            <Button size="sm" onClick={syncGmail} disabled={syncing}>
+              {syncing ? "Syncing…" : "Sync now"}
+            </Button>
+            <Button size="sm" variant="danger" onClick={disconnectGmail}>
+              Disconnect
+            </Button>
+          </div>
+        ) : (
+          <div className="mt-3">
+            <Button onClick={connectGmail} disabled={connecting}>
+              {connecting ? "Redirecting…" : "Connect Gmail"}
+            </Button>
+          </div>
+        )}
+      </GlassPanel>
 
       {data ? (
         <>
@@ -173,7 +284,7 @@ export default function VaultPage() {
                       {titleCase(row.table)}
                     </th>
                     <td className="tnum py-2 text-right text-[var(--fg-muted)]">
-                      {row.rows}
+                      {row.row_count}
                     </td>
                   </tr>
                 ))}

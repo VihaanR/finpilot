@@ -1,0 +1,132 @@
+{
+  "name": "Mandate Alert",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 30 3 * * *"
+            }
+          ]
+        }
+      },
+      "id": "557adee7-5069-43c7-b15d-e62b504b513b",
+      "name": "Daily 09:00 IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        16,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.first().json.banner.items || [];\nconst silent = items.filter(i => i.afa_band === 'SILENT' && !i.acknowledged);\nreturn silent.map(i => ({ json: i }));"
+      },
+      "id": "d20548fc-0b5f-48a7-ab84-208af6d464f7",
+      "name": "Filter silent mandates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "8369794470",
+        "text": "={{ $json.merchant }} debits ₹{{ Math.round($json.amount_paise/100) }} on {{ $json.due_date }} with no OTP — reply to revoke, or see the Revoke Kit in FinPilot.",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "11414c28-8383-41db-b3ce-ac5e5ae064d0",
+      "name": "Send mandate alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        688,
+        256
+      ],
+      "webhookId": "5d9ebb04-d503-4891-bbab-e8961d030ad9",
+      "credentials": {
+        "telegramApi": {
+          "id": "LEILerxWaPhF2sSp",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://finpilot-w4ki.onrender.com/api/radar",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "40a983ff-81b2-4ad5-8d2e-a21f0af79acb",
+      "name": "GET /api/radar1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        256
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "UTsd2rnqPOf8iTQ5",
+          "name": "FinPilot API"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily 09:00 IST": {
+      "main": [
+        [
+          {
+            "node": "GET /api/radar1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter silent mandates": {
+      "main": [
+        [
+          {
+            "node": "Send mandate alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET /api/radar1": {
+      "main": [
+        [
+          {
+            "node": "Filter silent mandates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "0e9c3481-e152-48a3-a0fc-73ecbbedc0e5",
+  "meta": {
+    "instanceId": "e5d651714a133c71d8488895df5e4f575bd9b519d1c3d9a10428b76c4788a153"
+  },
+  "nodeGroups": [],
+  "id": "maQNbBsstRdRo9Z7",
+  "tags": []
+}

@@ -17,12 +17,14 @@ from dataclasses import dataclass
 from .adapters.bank_pdf import HdfcPdfAdapter, IciciPdfAdapter
 from .adapters.base import ParseError, RawRow, StatementAdapter
 from .adapters.generic_csv import GenericCsvAdapter
+from .adapters.hdfc_email import HdfcEmailAdapter
 from .adapters.llm_fallback import LlmFallbackAdapter
 
 ADAPTERS: tuple[StatementAdapter, ...] = (
     GenericCsvAdapter(),
     HdfcPdfAdapter(),
     IciciPdfAdapter(),
+    HdfcEmailAdapter(),
     LlmFallbackAdapter(),
 )
 

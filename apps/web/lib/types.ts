@@ -276,7 +276,7 @@ export interface Vault {
     field_types: string[];
     redacted_count: number;
   }[];
-  storage_inventory: { table: string; rows: number; oldest?: string | null }[];
+  storage_inventory: { table: string; row_count: number }[];
   retention_days: number;
   redaction_example: {
     before: string;
@@ -285,6 +285,15 @@ export interface Vault {
     note: string;
   };
   ai_configured: boolean;
+}
+
+// Mirrors /api/email/status. `email_address` is pre-masked server-side —
+// the refresh token backing this connection never reaches the browser.
+export interface EmailStatus {
+  connected: boolean;
+  configured: boolean;
+  email_address?: string;
+  last_synced_at?: string | null;
 }
 
 // --- Agentic actions (dashboard panel) --------------------------------------

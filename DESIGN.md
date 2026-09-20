@@ -729,6 +729,8 @@ Stored in `consents.artefact`. Versioned — a changed artefact requires re-cons
 
 **Retention job** — a scheduled purge of documents past `retention_days`. Runs via n8n (P1) or an in-process scheduler.
 
+**Connect Gmail** — added after initial ship, at the top of the same page. One stored Gmail OAuth connection (`gmail.readonly`, single-owner — this product has no login), synced on demand via a **Sync now** button, never on a schedule. `ingest/adapters/hdfc_email.py` parses one verified HDFC transaction-alert template into a `RawRow`, which flows through the same normalise → classify → dedupe → insert pipeline as any upload (`ingest/pipeline.py::ingest_parsed_rows`). It bypasses the adapter registry entirely rather than reusing `registry.parse`, specifically so an unrecognised email is *skipped*, never handed to the LLM-fallback adapter — that fallback exists for statement uploads a user chose to submit, not for an inbox scan that could otherwise burn Gemini's 20-requests/day quota on marketing email and OTP alerts. The refresh token lives in its own table, deliberately excluded from `export_everything`/`erase_everything`'s generic loop so a DPDP export can never leak it; connecting Gmail adds Google as a consent-artefact third party and bumps `CONSENT_VERSION`.
+
 ### 10.3 Cited answers + Safe-to-Spend — P0
 
 Covered in §9.3 and §8.3. UI surface:

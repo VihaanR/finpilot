@@ -1,0 +1,165 @@
+{
+  "name": "Daily brief",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 30 2 * * *"
+            }
+          ]
+        }
+      },
+      "id": "6060199b-9bde-4e1e-8247-93d762a347a0",
+      "name": "Daily 08:00 IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://finpilot-w4ki.onrender.com/api/dashboard",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "fd024d61-eeaf-4da6-8f99-1c95fa89a0d2",
+      "name": "GET /api/dashboard",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        224,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "UTsd2rnqPOf8iTQ5",
+          "name": "FinPilot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://finpilot-w4ki.onrender.com/api/radar",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "c72aded7-be7b-4b0a-8097-9b50ef401ef8",
+      "name": "GET /api/radar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        448,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "UTsd2rnqPOf8iTQ5",
+          "name": "FinPilot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const dash = $('GET /api/dashboard').first().json;\nconst radar = $json;\nconst sts = dash.safe_to_spend || {};\nconst dueToday = (radar.banner?.items || []).filter(i => i.days_away <= 1);\nlet text = 'Good morning. Safe to spend: ₹' + Math.round((sts.safe_daily_paise||0)/100)\n  + '/day. Discretionary left this month: ₹' + Math.round((sts.discretionary_paise||0)/100) + '.';\nif (dueToday.length) {\n  text += '\\nDue today: ' + dueToday.map(i => i.merchant + ' ₹' + Math.round(i.amount_paise/100)).join(', ') + '.';\n}\nreturn [{ json: { text } }];"
+      },
+      "id": "ba19c24d-f6b3-435c-9cef-3f7b1b23f6e3",
+      "name": "Compose brief",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "8369794470",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "59893ce0-a113-4c33-a162-caa31e6bccef",
+      "name": "Send daily brief",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        0
+      ],
+      "webhookId": "a2358232-8db9-4b0f-bfee-310fc32b2312",
+      "credentials": {
+        "telegramApi": {
+          "id": "LEILerxWaPhF2sSp",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily 08:00 IST": {
+      "main": [
+        [
+          {
+            "node": "GET /api/dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET /api/dashboard": {
+      "main": [
+        [
+          {
+            "node": "GET /api/radar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET /api/radar": {
+      "main": [
+        [
+          {
+            "node": "Compose brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose brief": {
+      "main": [
+        [
+          {
+            "node": "Send daily brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "91a2062a-0f12-4560-831a-df52adafe006",
+  "meta": {
+    "instanceId": "e5d651714a133c71d8488895df5e4f575bd9b519d1c3d9a10428b76c4788a153"
+  },
+  "nodeGroups": [],
+  "id": "sI56gpVVS9T06zD3",
+  "tags": []
+}

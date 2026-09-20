@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .deps import get_store
-from .routes import agent, data, guard, ingest, insights, vault
+from .routes import agent, data, email, guard, ingest, insights, vault
 from .store import demo
 
 app = FastAPI(
@@ -35,6 +35,7 @@ app.add_middleware(
 
 app.include_router(agent.router)
 app.include_router(data.router)
+app.include_router(email.router)
 app.include_router(guard.router)
 app.include_router(ingest.router)
 app.include_router(insights.router)

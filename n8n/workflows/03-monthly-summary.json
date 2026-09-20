@@ -1,0 +1,113 @@
+{
+  "name": "Monthly summary",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 30 3 1 * *"
+            }
+          ]
+        }
+      },
+      "id": "107b9994-1483-48b8-95e7-861f293d21a1",
+      "name": "Monthly 1st 09:00 IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        64,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://finpilot-w4ki.onrender.com/api/summary/generate",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": []
+        },
+        "options": {}
+      },
+      "id": "54469d71-5bff-4c4b-8989-99b0dc555c2f",
+      "name": "POST /api/summary/generate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        288,
+        512
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "UTsd2rnqPOf8iTQ5",
+          "name": "FinPilot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "8369794470",
+        "text": "={{ $json.text || 'Summary unavailable: ' + $json.error }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "d9185270-fe32-468d-9d88-79f579dc57ae",
+      "name": "Send monthly summary",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        496,
+        512
+      ],
+      "webhookId": "896747ba-9b69-4bf2-94e0-bdc4ef97b320",
+      "credentials": {
+        "telegramApi": {
+          "id": "LEILerxWaPhF2sSp",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Monthly 1st 09:00 IST": {
+      "main": [
+        [
+          {
+            "node": "POST /api/summary/generate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /api/summary/generate": {
+      "main": [
+        [
+          {
+            "node": "Send monthly summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "ab562527-bdf6-4469-917b-ed741d1b6cdd",
+  "meta": {
+    "instanceId": "e5d651714a133c71d8488895df5e4f575bd9b519d1c3d9a10428b76c4788a153"
+  },
+  "nodeGroups": [],
+  "id": "WtWEx0ClV5lCduXE",
+  "tags": []
+}

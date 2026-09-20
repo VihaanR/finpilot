@@ -157,6 +157,20 @@ create table if not exists consents (
   scope text not null,
   granted integer not null default 1
 );
+
+-- Single stored Gmail connection (USER-facing "Connect Gmail" vault panel).
+-- Not in `_USER_TABLES`: `refresh_token` must never appear in the DPDP export
+-- bundle, so erase/export/inventory handle this table explicitly instead of
+-- through the generic loop.
+create table if not exists email_connections (
+  id text primary key,
+  provider text not null default 'gmail',
+  email_address text not null,
+  refresh_token text not null,
+  last_synced_at text,
+  last_message_internal_date text,
+  created_at text not null
+);
 """
 
 _USER_TABLES = (
@@ -623,6 +637,12 @@ class Store:
                 self.conn.execute("select count(*) c from " + table).fetchone()["c"]
             )
             self.conn.execute("delete from " + table)
+        # Erasure disconnects Gmail too, but the count is reported separately
+        # from export/inventory since this table also holds a refresh token.
+        counts["email_connections"] = int(
+            self.conn.execute("select count(*) c from email_connections").fetchone()["c"]
+        )
+        self.conn.execute("delete from email_connections")
         self.conn.commit()
         return counts
 
@@ -641,4 +661,38 @@ class Store:
         for table in _USER_TABLES:
             count = int(self.conn.execute("select count(*) c from " + table).fetchone()["c"])
             out.append({"table": table, "row_count": count})
+        # Masked count only — never the row itself, which carries a refresh
+        # token (DESIGN.md 12.1's field-names-not-values rule, applied here).
+        email_count = int(
+            self.conn.execute("select count(*) c from email_connections").fetchone()["c"]
+        )
+        out.append({"table": "email_connections", "row_count": email_count})
         return out
+
+    # --- Gmail connection -----------------------------------------------------
+
+    def set_email_connection(self, *, email_address: str, refresh_token: str) -> None:
+        """Replaces any existing connection — one Gmail account for the app."""
+        self.conn.execute("delete from email_connections")
+        self.conn.execute(
+            "insert into email_connections (id, provider, email_address,"
+            " refresh_token, created_at) values (?,?,?,?,?)",
+            (_new_id(), "gmail", email_address, refresh_token, _now()),
+        )
+        self.conn.commit()
+
+    def email_connection(self) -> dict[str, Any] | None:
+        row = self.conn.execute("select * from email_connections limit 1").fetchone()
+        return dict(row) if row else None
+
+    def clear_email_connection(self) -> None:
+        self.conn.execute("delete from email_connections")
+        self.conn.commit()
+
+    def mark_email_synced(self, *, last_message_internal_date: str) -> None:
+        self.conn.execute(
+            "update email_connections set last_synced_at = ?,"
+            " last_message_internal_date = ?",
+            (_now(), last_message_internal_date),
+        )
+        self.conn.commit()

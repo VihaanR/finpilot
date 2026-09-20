@@ -18,7 +18,7 @@ from ..engine.types import Direction
 from ..enrich.rules import UserRule, classify
 from ..models.taxonomy import slugs
 from ..store.db import Store
-from .adapters.base import ParseError
+from .adapters.base import ParseError, RawRow
 from .banks import detect_bank
 from .normalize import NormalizedRow, normalize
 from .pdf import extract_text
@@ -248,3 +248,106 @@ def ingest(
         if event["stage"] == "done":
             final = event["result"]
     return final
+
+
+def ingest_parsed_rows(
+    store: Store,
+    *,
+    rows: list[RawRow],
+    adapter_name: str,
+    adapter_version: str,
+    confidence: float,
+    filename: str,
+    bank_code: str | None,
+    account_id: str | None = None,
+    account_name: str | None = None,
+) -> IngestResult:
+    """normalise -> classify -> dedupe -> insert -> record, for rows a caller
+
+    has already parsed itself rather than obtained from `registry.parse`.
+
+    `ingest/gmail.py` is the one caller: a Gmail alert is parsed by a single
+    fixed adapter (`HdfcEmailAdapter`), never through the registry, because
+    the registry's last resort is an LLM call on anything deterministic
+    adapters decline — appropriate for a statement upload, wasteful and
+    inappropriate for an inbox full of already-known-sender emails. A row
+    that doesn't match the fixed adapter is meant to be skipped, not guessed
+    at by a model.
+    """
+    result = IngestResult(
+        adapter=adapter_name,
+        confidence=round(confidence, 3),
+        parsed=len(rows),
+        bank_code=bank_code,
+    )
+    if not rows:
+        return result
+
+    target_account = account_id or store.upsert_account(
+        bank_code=bank_code or "UNKNOWN",
+        display_name=account_name or _account_label(bank_code, filename),
+    )
+
+    user_rules = tuple(
+        UserRule(
+            pattern=str(r["pattern"]),
+            match_type=str(r["match_type"]),
+            category_slug=str(r["category_slug"]),
+            merchant=str(r["merchant"]),
+        )
+        for r in store.user_rules()
+    )
+
+    allowed = set(slugs())
+    prepared: list[tuple[NormalizedRow, str, str, float, str | None]] = []
+    uncategorised = 0
+    for row in rows:
+        normalized = normalize(
+            txn_date=row.txn_date.isoformat(),
+            raw_narration=row.raw_narration,
+            amount_paise=row.amount_paise,
+            direction=Direction.CREDIT if row.is_credit else Direction.DEBIT,
+            balance_paise=row.balance_paise,
+        )
+        decision = classify(
+            normalized_merchant=normalized.normalized_merchant,
+            raw_narration=normalized.raw_narration,
+            counterparty_vpa=normalized.counterparty_vpa,
+            channel=normalized.channel,
+            direction=normalized.direction,
+            user_rules=user_rules,
+        )
+        slug = decision.category_slug if decision.category_slug in allowed else "uncategorised"
+        if not decision.is_confident:
+            slug = "uncategorised"
+            uncategorised += 1
+        prepared.append(
+            (normalized, slug, decision.source, decision.confidence, decision.service_type)
+        )
+
+    result.uncategorised = uncategorised
+
+    inserted, duplicates = store.insert_transactions(
+        account_id=target_account, document_id=None, rows=prepared
+    )
+    result.inserted = inserted
+    result.duplicates = duplicates
+
+    document_id = store.record_document(
+        filename=filename,
+        bank_code=bank_code,
+        adapter_name=adapter_name,
+        adapter_version=adapter_version,
+        confidence=result.confidence,
+        row_count=len(rows),
+        inserted_count=inserted,
+        duplicate_count=duplicates,
+    )
+    result.document_id = document_id
+
+    store.conn.execute(
+        "update transactions set document_id = ? where document_id is null and account_id = ?",
+        (document_id, target_account),
+    )
+    store.conn.commit()
+    return result
