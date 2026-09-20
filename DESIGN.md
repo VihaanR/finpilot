@@ -716,18 +716,47 @@ MV3 extension, content scripts on `*://*.amazon.in/*` and `*://*.flipkart.com/*`
 
 **Distribution constraint, stated honestly**: Chrome Web Store review does not clear in 48 hours. The extension ships **unpacked** via GitHub with load instructions in USER.md, and appears in the demo video. It is deliberately *not* part of the Agent Access Link given to judges.
 
+> **Built 20 Sep 2026, with the mechanism simplified.** This build's API has
+> no auth (§10.6 below and USER.md §8e), so step 1's signed-snapshot
+> handshake via `externally_connectable` was dropped — the extension fetches
+> `/api/dashboard` directly instead, same data, no login dependency to wire
+> up. The goal-ETA-simulation trigger in step 3 is not built; only the
+> discretionary-budget comparison is. "Wait 24 hours" writes a local
+> cooldown record rather than actually enqueuing a Telegram nudge, since
+> that needs §10.6's bot token. See `extension/README.md` for what was
+> verified and what still needs a real `amazon.in`/`flipkart.com` cart to
+> confirm.
+
 ### 10.6 n8n Telegram agent — P1 · the optional n8n deliverable
 
 Four workflows, exported to `n8n/finpilot-workflows.json`:
 
 | Workflow | Trigger | Behaviour |
 |---|---|---|
-| **Ingest** | Telegram Trigger | Document → download → `POST /api/ingest` → reply with parse summary. Text → `POST /api/agent/ask` → reply with the answer and top citations |
-| **Daily brief** | Schedule, 08:00 IST | `GET /api/brief` → safe-to-spend, today's obligations, any new anomaly |
-| **Mandate alert** | Schedule, 09:00 IST | `GET /api/obligations?days=3` → if any `SILENT` items, alert with the revoke link |
-| **Monthly summary** | Schedule, 1st at 09:00 | `POST /api/summary/generate` (Opus) → Telegram + email |
+| **Ingest** | Telegram Trigger | Document → download → `POST /api/ingest/sync` → reply with parse summary. Text → `POST /api/agent/ask/sync` → reply with the answer |
+| **Daily brief** | Schedule, 08:00 IST | `GET /api/dashboard` + `GET /api/radar` → safe-to-spend and anything due today |
+| **Mandate alert** | Schedule, 09:00 IST | `GET /api/radar` → any unacknowledged `SILENT` item due within the banner window → alert |
+| **Monthly summary** | Schedule, 1st at 09:00 | `POST /api/summary/generate` → Telegram |
 
 Telegram rather than WhatsApp is a deliberate, stated choice: WhatsApp Business API approval is measured in days, Telegram bot creation in minutes. Same demonstrated capability, zero schedule risk.
+
+> **Corrected 20 Sep 2026.** The table originally named `GET /api/brief` and
+> `GET /api/obligations?days=3`, neither of which was ever built — §10.6 was
+> written before T09–T11 shipped the actual route layer. The corrected table
+> above points at the routes that actually exist: `/api/dashboard` carries
+> safe-to-spend, `/api/radar` carries obligations with `afa_band` and
+> `days_away` already computed, so nothing new needed adding. "(Opus)" on
+> the monthly summary was a leftover from before the runtime model was
+> decided (§9.1) — it runs on the same model chat does, whichever that is
+> today. Email delivery is dropped from the monthly summary; Telegram only.
+>
+> **Built the same day, but not verified.** BUILD_TASKS.md T14's own process
+> — build in a running n8n, then export — needed Docker, which wasn't
+> available. `n8n/generate_workflows.py` hand-produces the same JSON shape
+> instead; it's structurally sound (validated JSON, every node reachable
+> from one trigger, no orphans, secret scan clean) but has never been
+> imported into n8n or run against a live bot. `n8n/README.md` has the gap
+> and the steps to close it.
 
 ### 10.7 Vernacular summary — P0 (translation only)
 

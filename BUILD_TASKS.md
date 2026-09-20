@@ -363,6 +363,26 @@ Implement DESIGN.md §10.5.
 - Interstitial is keyboard-operable and focus-trapped; Escape returns focus to the page
 - The extension stores no transaction data — verify `chrome.storage` contents
 
+> **Built 20 Sep 2026, with two deliberate deviations from the spec above —
+> see `extension/README.md` for why.** `externally_connectable` and the
+> signed-snapshot handshake were dropped: this build's API has no auth
+> (USER.md §8e), so the extension just fetches `/api/dashboard` directly
+> instead, same data, one fewer moving part. "Wait 24 hours" writes a local
+> cooldown record (visible in the popup) but does not yet enqueue a real
+> Telegram nudge — that needs T14's bot token, which this session didn't
+> have.
+>
+> Verified, not just written: loads unpacked with zero manifest/console
+> errors (Playwright-driven smoke test); the background service worker
+> fetches real production data end to end (`discretionary_paise` parsed
+> correctly into the popup); the primary-selector parser, the ₹-numeric
+> heuristic, and the interstitial's full accessibility contract (role,
+> initial focus, Tab trap, Escape closes and returns focus) all pass against
+> fixture pages in `extension/test-fixtures/`, including one with every known
+> selector deliberately absent to prove the heuristic alone still finds the
+> total. **Never tested against a real `amazon.in` or `flipkart.com` cart** —
+> that needs a live account and cart, which is a manual, owner-side check.
+
 ---
 
 ## T14 — n8n workflows · [S] · 60 min · P1
@@ -382,6 +402,17 @@ Build the four workflows in DESIGN.md §10.6 in a local Docker n8n, then export.
   ```powershell
   Select-String -Path n8n\finpilot-workflows.json -Pattern "sk-ant|eyJ|bot[0-9]{8,}|service_role"
   ```
+
+> **Built 20 Sep 2026, but not the way this task describes.** "Build in a
+> local Docker n8n, then export" needs Docker running locally, which wasn't
+> available (PROGRESS.md's blockers list). `n8n/generate_workflows.py`
+> produces the same JSON n8n's editor would export — same node types,
+> correctly wired connections (verified structurally: every node reachable
+> from exactly one trigger, no orphans), credentials referenced by name only
+> — but **it has never been imported into a running n8n or exercised against
+> a live Telegram bot.** The secret scan above passes against the committed
+> file. None of the four functional acceptance criteria above are verified;
+> `n8n/README.md` has the exact steps and is explicit about this gap.
 
 ---
 

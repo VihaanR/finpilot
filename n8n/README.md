@@ -1,0 +1,71 @@
+# FinPilot n8n workflows
+
+Four workflows (BUILD_TASKS.md T14, DESIGN.md §10.6), exported to
+`finpilot-workflows.json`.
+
+| Workflow | Trigger | Behaviour |
+|---|---|---|
+| **Ingest** | Telegram message | Document → `POST /api/ingest/sync` → reply with the adapter, confidence and row counts. Text → `POST /api/agent/ask/sync` → reply with the answer. |
+| **Daily brief** | Schedule, 08:00 IST | `GET /api/dashboard` + `GET /api/radar` → safe-to-spend and anything due today, sent to Telegram. |
+| **Mandate alert** | Schedule, 09:00 IST | `GET /api/radar` → any unacknowledged `SILENT` item due within the banner window → Telegram alert. |
+| **Monthly summary** | Schedule, 1st at 09:00 IST | `POST /api/summary/generate` → the month's prose summary, sent to Telegram. |
+
+## The honest state of this file
+
+**This was hand-authored against n8n's node schema, not built in n8n's own
+editor and exported.** BUILD_TASKS.md's own process for T14 is "build the
+four workflows in a local Docker n8n, then export" — that needs Docker
+running locally, which wasn't available in this session (PROGRESS.md's
+blockers list). `generate_workflows.py` produces this JSON programmatically
+instead, using the same node types and parameter shapes n8n's editor would
+export, but it has never actually been imported into a running n8n or
+exercised against a live Telegram bot.
+
+Treat this as a well-structured starting point, not a verified deliverable.
+Every one of BUILD_TASKS.md's T14 acceptance criteria — sending a statement
+to the bot and getting a parse summary back, asking a question and getting
+the right answer, the daily brief firing correctly, a clean import into a
+fresh n8n — needs to actually be run once Docker and a bot token exist.
+
+## To actually use this
+
+1. **Docker + n8n**: `docker run -it --rm -p 5678:5678 n8nio/n8n` (or add to
+   `docker-compose` if you already run other services). Open
+   `http://localhost:5678`.
+2. **Telegram bot token** (USER.md §5): message [@BotFather](https://t.me/BotFather),
+   `/newbot`, copy the token.
+3. In n8n, add two credentials, **named exactly this** — the workflows
+   reference credentials by name, not by inlined secret, so the names must
+   match or n8n will ask you to reassign them on import:
+   - **`Telegram Bot`** — type "Telegram API", paste the bot token.
+   - **`FinPilot API`** — type "Header Auth". This API has no auth enforced
+     yet (`internal_api_token` in `services/api/app/config.py` is defined
+     but never checked — see USER.md), so any header name/value works today;
+     this credential exists so nothing needs to change here if that gets
+     enforced later. Header name `Authorization`, value `Bearer <anything>`.
+4. **Import**: n8n → Workflows → Import from File → `finpilot-workflows.json`.
+   It imports all four at once (n8n's multi-workflow array format).
+5. **Fix the two placeholders**: the Daily brief, Mandate alert, and Monthly
+   summary workflows send to a fixed chat, since a schedule trigger has no
+   inbound message to reply to. Open each, find the Telegram node's **Chat
+   ID** field (`REPLACE_WITH_YOUR_TELEGRAM_CHAT_ID`), and set it to your own
+   chat id (message your bot once, then check
+   `https://api.telegram.org/bot<token>/getUpdates` for `message.chat.id`).
+6. **Activate** each workflow (the toggle in the top-right of its editor).
+7. Test against BUILD_TASKS.md's T14 acceptance criteria, in order: send a
+   statement file to the bot, ask it a spending question, trigger the daily
+   brief manually ("Execute Workflow" in the editor doesn't wait for the
+   schedule), and re-export to confirm the re-exported file still passes the
+   secret scan below.
+
+## Secret scan (T14 acceptance criterion)
+
+```bash
+grep -inE "sk-ant|eyJ|bot[0-9]{8,}|service_role" n8n/finpilot-workflows.json
+```
+
+Returns nothing as committed — credentials are referenced by name
+(`FinPilot API`, `Telegram Bot`), never inlined. Re-run this after any manual
+edit in n8n's editor before re-exporting; n8n does not inline credential
+*values* into workflow JSON by default, but it's the check that catches it
+if that ever changes.

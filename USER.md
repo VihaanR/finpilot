@@ -169,14 +169,13 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 2. `/newbot` → name `FinPilot` → username `finpilot_<something>_bot` (must be globally unique and end in `bot`)
 3. Copy the token → `TELEGRAM_BOT_TOKEN`
 4. `/setdescription` → *"Your personal finance agent. Send a statement or ask a question."*
-5. `/setcommands` →
-   ```
-   start - Link your FinPilot account
-   brief - Today's spending brief
-   upcoming - Recurring payments due soon
-   summary - This month's summary
-   ```
-6. Message your own bot once so it can message you back — Telegram bots cannot initiate conversations
+5. Message your own bot once so it can message you back — Telegram bots cannot initiate conversations. This also gives you your own chat id: check `https://api.telegram.org/bot<token>/getUpdates` after messaging it, and look for `message.chat.id` — you need this for step 6 below.
+
+The daily brief, mandate alert and monthly summary run **on their own
+schedule** (08:00 / 09:00 / 1st-of-month IST), not on a typed command —
+`/setcommands` was dropped from this list because nothing in the built
+workflows listens for a `/brief`-style command; sending the bot a document
+or a plain-English question is what it actually responds to on demand.
 
 Takes about three minutes. This is why we chose Telegram over WhatsApp: the WhatsApp Business API needs Meta app review measured in days, which does not fit a 48-hour window.
 
@@ -194,13 +193,24 @@ Open `http://localhost:5678`, create the local owner account (local only, no clo
 
 ### Import the workflows
 
-1. **Workflows → Import from File** → `n8n/finpilot-workflows.json`
+**Read `n8n/README.md` first.** The committed `finpilot-workflows.json` was
+hand-authored against n8n's node schema (`n8n/generate_workflows.py`), not
+built in n8n's own editor and exported — Docker wasn't available in the
+session that built T14, so none of this has actually been imported or run
+against a live bot yet. Everything below is what closes that gap.
+
+1. **Workflows → Import from File** → `n8n/finpilot-workflows.json` — imports all four at once
 2. **Credentials → Add credential → Telegram API** → paste the bot token → name it exactly **`Telegram Bot`**
-3. **Credentials → Add credential → Header Auth** → Name: `Authorization`, Value: `Bearer <INTERNAL_API_TOKEN>` → name it exactly **`FinPilot API`**
-4. In each workflow, set the API base URL variable to your Render URL
-5. **Activate** all four workflows
+3. **Credentials → Add credential → Header Auth** → Name: `Authorization`, Value: `Bearer <INTERNAL_API_TOKEN>` (any value works today — this API has no auth enforced yet, §8e) → name it exactly **`FinPilot API`**
+4. The API base URL is already baked into each HTTP node as your Render URL — no separate variable to set, but double-check it if you're testing against localhost instead
+5. Open the **Daily brief**, **Mandate alert** and **Monthly summary** workflows and replace `REPLACE_WITH_YOUR_TELEGRAM_CHAT_ID` in each one's Telegram node with the chat id from step 5 above — a schedule trigger has no inbound message to reply to, so this can't be inferred automatically the way the Ingest workflow's replies are
+6. **Activate** all four workflows
 
 > The credential names must match exactly. The exported JSON references credentials by name; a mismatch causes silent no-ops rather than visible errors.
+
+Test each acceptance criterion from BUILD_TASKS.md T14 by hand: send the bot
+a statement file, ask it a spending question, use "Execute Workflow" on the
+Daily brief to trigger it without waiting for 08:00.
 
 ### Re-export for submission
 
@@ -222,20 +232,28 @@ It is a P1 deliverable. If it fights you for more than 45 minutes, ship without 
 
 ## 7. Browser extension — Hour 14.5 (after T13)
 
-```powershell
-cd apps\extension
-npm install
-npm run build
-```
+No build step — it's plain JS/CSS/JSON, loads directly. Full detail in
+`extension/README.md`; the short version:
 
-Then in Chrome:
 1. `chrome://extensions`
 2. Toggle **Developer mode** on (top right)
-3. **Load unpacked** → select `V:\Projects\FinPilot\apps\extension\dist`
+3. **Load unpacked** → select `V:\Projects\FinPilot\extension`
 4. Pin it to the toolbar (puzzle icon → pin) so it's visible when you record
-5. Log into the FinPilot web app in the same browser — this is what writes the budget snapshot the extension reads
+5. Open the popup — it should show a discretionary-budget figure within a
+   few seconds, fetched live from production. Nothing to log into: this
+   build's API has no auth (§8e), so the extension fetches
+   `/api/dashboard` directly rather than needing the web app to hand it a
+   snapshot on login (a deliberate simplification over the original
+   DESIGN.md §10.5 mechanism — see `extension/README.md`).
 
-**Test before recording:** open `amazon.in`, add something above your remaining discretionary budget, go to the cart. The interstitial should appear.
+**Test before recording — this is the one thing not yet verified.** Open
+`amazon.in`, add something above your remaining discretionary budget, go to
+the cart. The interstitial should appear. Everything else about the
+extension (manifest loads cleanly, the cart-total parser, the ₹-numeric
+fallback heuristic, the interstitial's accessibility contract) was verified
+against fixture pages in `extension/test-fixtures/` during the build — a
+real Amazon or Flipkart cart is the one thing that needed a human account
+and couldn't be checked automatically.
 
 > Not published to the Chrome Web Store — review takes days and we have 48 hours. This is a deliberate, stated choice, not an oversight. It does **not** go in the Agent Access Link field; it goes in Additional Materials as a GitHub link with these install instructions.
 
@@ -449,7 +467,7 @@ The two moments where your attention is worth most: **hour 5–7** (engine corre
 
 **Hour 12.5** — [ ] Migrations pushed · [ ] Render live, `/health` green · [ ] Vercel live · [ ] CORS + auth URLs · [ ] Demo seeded · [ ] Reset button works · [ ] Keep-alive running · [ ] **Verified in incognito**
 
-**Hour 13–15** — [ ] Telegram bot · [ ] n8n imported, activated, re-exported, secret-scanned · [ ] Extension built and loaded · [ ] Extension tested on real Amazon
+**Hour 13–15** — [ ] Telegram bot · [ ] n8n imported, activated, re-exported, secret-scanned · [ ] Extension loaded unpacked · [ ] Extension tested on real Amazon
 
 **Hour 16–18** — [ ] Dry run · [ ] Video < 3:00 · [ ] Drive sharing verified in incognito · [ ] Form submitted · [ ] LinkedIn post 4
 

@@ -1,0 +1,75 @@
+/* FinPilot Budget Guard interstitial — injected into the retailer's page,
+   so these rules are scoped tightly and use !important to survive site CSS. */
+
+#finpilot-guard-overlay {
+  all: initial;
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483647 !important;
+  background: rgba(20, 20, 20, 0.55) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif !important;
+}
+
+#finpilot-guard-dialog {
+  background: #fdfbf5 !important;
+  color: #1c1c1a !important;
+  border-radius: 12px !important;
+  padding: 28px !important;
+  max-width: 420px !important;
+  width: 90% !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35) !important;
+  border-top: 6px solid #a1442e !important;
+}
+
+#finpilot-guard-dialog h2 {
+  font-size: 18px !important;
+  margin: 0 0 12px !important;
+  color: #1c1c1a !important;
+}
+
+#finpilot-guard-dialog p {
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  margin: 0 0 10px !important;
+  color: #3a3a36 !important;
+}
+
+#finpilot-guard-dialog .finpilot-guard-actions {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  margin-top: 18px !important;
+}
+
+#finpilot-guard-dialog button {
+  all: unset !important;
+  box-sizing: border-box !important;
+  display: block !important;
+  width: 100% !important;
+  padding: 10px 14px !important;
+  border-radius: 8px !important;
+  font-size: 14px !important;
+  text-align: center !important;
+  cursor: pointer !important;
+  border: 1px solid #b8b3a4 !important;
+}
+
+#finpilot-guard-dialog button:focus-visible {
+  outline: 3px solid #1a5f4a !important;
+  outline-offset: 2px !important;
+}
+
+#finpilot-guard-dialog .finpilot-guard-primary {
+  background: #1a5f4a !important;
+  color: #fdfbf5 !important;
+  border-color: #1a5f4a !important;
+  font-weight: 600 !important;
+}
+
+#finpilot-guard-dialog .finpilot-guard-secondary {
+  background: transparent !important;
+  color: #1c1c1a !important;
+}

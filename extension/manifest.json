@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "FinPilot Budget Guard",
+  "version": "1.0.0",
+  "description": "Warns before a purchase on Amazon.in or Flipkart pushes you past your FinPilot discretionary budget.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["storage", "alarms"],
+  "host_permissions": [
+    "https://*.amazon.in/*",
+    "https://*.flipkart.com/*",
+    "https://finpilot-w4ki.onrender.com/*",
+    "http://localhost:8001/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://*.amazon.in/*"],
+      "js": ["content/interstitial.js", "content/heuristic.js", "content/amazon.js"],
+      "css": ["content/interstitial.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*.flipkart.com/*"],
+      "js": ["content/interstitial.js", "content/heuristic.js", "content/flipkart.js"],
+      "css": ["content/interstitial.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

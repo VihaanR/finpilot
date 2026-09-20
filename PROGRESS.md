@@ -1,13 +1,18 @@
 # FinPilot progress ledger
 
-> **Time budget, set by the owner 20 Sep 2026: ~6 hours remaining** before
-> submission. Core product (T01–T12, T15) is done and live — this budget is
-> for the optional P1 items (T13 extension, T14 n8n) and recording T16, not
-> for finishing anything load-bearing. If time runs short, **T16 (record +
-> submit) wins over any partial P1 work** — a working, deployed, un-recorded
-> product scores worse than a recorded one, per BUILD_TASKS.md's own
-> scheduling rule. This ledger is updated after every change from here on,
-> so re-read this file first if resuming mid-session.
+> **Time budget, set by the owner 20 Sep 2026: ~6 hours remaining as of the
+> start of this session's second half.** Core product (T01–T12, T15) is done
+> and live, chat is solid (the Gemini-quota wall is resolved — see the Groq
+> switch below), and both optional P1 items (T13 extension, T14 n8n) are now
+> built — code-complete and largely verified, with the remaining gaps being
+> owner-side manual checks (a real Amazon/Flipkart cart for T13; Docker +
+> a Telegram bot for T14 — see Completed recently for exactly what's left).
+> Remaining budget is for those two checks and recording T16. If time runs
+> short, **T16 (record + submit) wins over any partial P1 work** — a
+> working, deployed, un-recorded product scores worse than a recorded one,
+> per BUILD_TASKS.md's own scheduling rule. This ledger is updated after
+> every change from here on, so re-read this file first if resuming
+> mid-session.
 
 
 Repo: `V:\Projects\FinPilot` — https://github.com/VihaanR/finpilot (public)
@@ -21,8 +26,10 @@ migrations**, and **T12 deploy**. The owner supplied a Gemini key and a
 Supabase project mid-session, which turned several long-standing "unverified"
 claims into measured ones — and falsified two of them. **FinPilot is now live
 in production** at https://finpilot-swart.vercel.app, backed by
-https://finpilot-w4ki.onrender.com. Everything is committed and pushed to
-`origin/main`.
+https://finpilot-w4ki.onrender.com. A second half then switched chat and the
+summary from Gemini to Groq after the free-tier quota ran out, and built
+both P1 items — **T13 Budget Guard** and **T14 n8n workflows**. Everything is
+committed and pushed to `origin/main`.
 
 Scope decided with the owner: Gemini is for **recording a demo video**, not
 live judging, so the free tier stands and billing was rejected. The Supabase
@@ -203,6 +210,87 @@ afterwards; the schema is empty of data.
   1 `price_hike`, 1 `new_large_merchant`).
 
 ## Completed recently
+
+- **T13 Budget Guard extension and T14 n8n workflows, both built.** Neither
+  was blocking — Docker still isn't running locally, so T14's own build
+  process (build in a running n8n, then export) couldn't happen — but both
+  are now in a real, mostly-verified state rather than untouched.
+
+  **T13** (`extension/`) — MV3, no build step, loads unpacked directly.
+  Deliberately simplified from DESIGN.md §10.5: the extension fetches
+  `/api/dashboard` directly rather than the spec's signed-snapshot handshake
+  via `externally_connectable`, because this API has no auth to make that
+  handshake meaningful. Verified with a Playwright-driven smoke test against
+  the actual loaded extension (zero manifest/console errors, background
+  service worker fetches real production data — `discretionary_paise`
+  parsed correctly through to the popup) and against fixture pages in
+  `extension/test-fixtures/` for the parts that need DOM content a live
+  retailer provides: the primary-selector parser, the ₹-numeric fallback
+  heuristic (correctly picks a ₹9,999 order total over a ₹40 delivery fee
+  when every known selector is deliberately absent), and the interstitial's
+  full accessibility contract — `role="alertdialog"`, initial focus lands on
+  a button, Tab is trapped between the three actions, Escape closes and
+  returns focus to whatever had it. **Never tested against a real
+  `amazon.in` or `flipkart.com` cart** — that's the one thing left needing a
+  human account, flagged in `extension/README.md` and USER.md §7.
+
+  **T14** (`n8n/finpilot-workflows.json`) — four workflows (Ingest, Daily
+  brief, Mandate alert, Monthly summary), hand-authored via
+  `n8n/generate_workflows.py` against n8n's node schema rather than built in
+  n8n's own editor, since Docker wasn't available to run n8n locally. Points
+  at the API routes that actually exist (`/api/ingest/sync`,
+  `/api/agent/ask/sync`, `/api/dashboard`, `/api/radar`,
+  `/api/summary/generate`) rather than the `/api/brief`/`/api/obligations`
+  DESIGN.md §10.6 assumed and this session never built. Structurally
+  verified — valid JSON, every node reachable from exactly one trigger with
+  no orphans, secret scan clean — but **never imported into a running n8n or
+  exercised against a live Telegram bot.** `n8n/README.md` is explicit about
+  that gap and has the exact steps to close it once Docker and a bot token
+  exist.
+
+  `DESIGN.md` §10.5/§10.6 and `BUILD_TASKS.md`'s T13/T14 sections both carry
+  correction notes recording these deviations and the verification state,
+  matching how every other divergence from the original design in this repo
+  has been handled.
+
+- **Chat and the monthly summary switched from Gemini to Groq, live and
+  verified in production.** Gemini's chat quota (20 requests/day) ran out
+  during this session's own testing, with no headroom left for recording —
+  Groq's free tier is rate-limited per minute rather than gated by a hard
+  daily wall, which is what actually fixes that. `agent/loop.py`'s
+  hand-driven tool-calling loop now speaks Groq's OpenAI-compatible chat
+  completions API instead of the Gemini SDK; citations, the guardrail order,
+  and the redaction seam (`llm.py`) are all unchanged — only the transport
+  and the model id moved. Gemini stays for bulk categorisation, the PDF
+  LLM-fallback adapter, and embeddings, none of which shared the problem.
+
+  Three real defects surfaced getting this live, in order:
+  1. **`llama-3.3-70b-versatile` 404'd in production** — "does not exist or
+     you do not have access to it" — despite being listed as live on Groq's
+     own docs page. Read as an account-tier restriction, not a real
+     deprecation.
+  2. **The fallback, `llama-3.1-8b-instant`, 404'd identically.** Since two
+     different valid model ids failed the same way, the real signal was the
+     account, not the model choice. Checking the account's own Playground
+     model dropdown (rather than trusting Groq's docs) gave the actual
+     available set; `openai/gpt-oss-20b` — documented tool-calling capable —
+     was in it and is what's live now.
+  3. **"Where did I spend the most last month?"** — one of the four canned
+     demo questions — failed roughly half the time with "I don't have data
+     for that period", alternating with a correct, fully-cited answer on an
+     identical repeat call. Cause: the system prompt never stated the
+     ledger's current date, so resolving "last month" into a
+     `period=YYYY-MM` tool argument was genuinely ambiguous, and this
+     smaller model guessed wrong noticeably more often than the ones this
+     ran on before. Fixed by grounding the prompt in `snapshot.as_of`
+     (`agent/prompts.py`'s `system_prompt(as_of)`); confirmed 3/3 correct,
+     fully cited, on repeat testing against production after the fix.
+
+  `DESIGN.md` §9.1, `USER.md` §1/§1b, `CLAUDE.md`'s quota gotcha, the vault
+  consent artefact, and the eval harness's quota-skip message were all
+  updated to match — they were written when Gemini served chat too.
+  `pytest services/api/tests/ evals/` stayed green (326 passed) through every
+  step of this.
 
 - **T12 deploy is done — live in production, verified from outside.**
   `https://finpilot-w4ki.onrender.com` (API) and
@@ -449,16 +537,19 @@ afterwards; the schema is empty of data.
 - **Docker Desktop daemon not running**, so a local Postgres+pgvector container
   was not available as a fallback for the above. Starting Docker Desktop would
   unblock migration testing without needing Supabase.
-- **Gemini key supplied and working.** Not a blocker — billing was
-  considered and rejected (see header): the key is for recording a demo
-  video, not live judging, so ~20 requests/day/model is enough. Pace
-  questions a few seconds apart while recording.
+- ~~Gemini key supplied and working, chat quota tight (~20 req/day).~~
+  **Superseded 20 Sep 2026.** Chat and the summary now run on Groq
+  (`openai/gpt-oss-20b`), rate-limited per minute rather than a hard daily
+  cap — see the Groq switch under Completed recently. Gemini's remaining
+  job (bulk categorisation, PDF fallback, embeddings) stays well under its
+  free-tier cap on the seed dataset (~19 calls total).
 - ~~Vercel + Render accounts (T12).~~ **Cleared 20 Sep 2026.** Both deployed,
   live, verified. See Completed recently.
-- **cron-job.org keep-alive ping** — the one remaining owner-only step. Not
-  set up yet; Render's free tier sleeps after 15 idle minutes, so this should
-  happen before any live clicking, not just before a recording.
-- Later, if pursued: Telegram bot token (T14), n8n via Docker (T14).
+- ~~cron-job.org keep-alive ping.~~ **Set up by the owner, 20 Sep 2026.**
+  Render's free tier no longer risks a cold-start on a judge's first click.
+- **Docker still not running** — the one remaining blocker for T14
+  verification (see Completed recently: the workflow JSON is built, just
+  never imported or run). Telegram bot token also still needed for the same.
 
 **Code blockers:** none. T04 and T05 tier-1 are done and were built entirely
 offline; the SQLite store substitutes for Supabase so the frontend has real
@@ -497,12 +588,28 @@ orchestrator fail-fast rule; everything since has been implemented directly.
 - **The NVDA pass.** axe-core is a floor, not a ceiling: it cannot judge
   whether a label is *comprehensible*. Still the only accessibility claim in
   DESIGN.md §11 with no evidence behind it.
-- **T13** Budget Guard extension, **T14** n8n workflows (both P1).
+- ~~T13 Budget Guard extension, T14 n8n workflows (both P1).~~ **Built 20
+  Sep 2026** — see Completed recently. What's left of each is verification
+  only, both owner-side: T13 needs a real `amazon.in`/`flipkart.com` cart;
+  T14 needs Docker running and the import steps in `n8n/README.md` walked
+  through once.
 - **T16** video + submission.
 
 
 ## Unverified figures
 
+- **The Budget Guard extension has never seen a real Amazon.in or Flipkart
+  cart.** Its cart-total parsing (primary selectors and the ₹-numeric
+  heuristic) and the interstitial's accessibility contract are verified
+  against fixture pages in `extension/test-fixtures/`; the DOM of an actual
+  retailer page, with real markup and real ad/tracking scripts running
+  alongside it, is not something this session could exercise.
+- **The n8n workflow export has never been imported into a running n8n or
+  run against a live Telegram bot.** `n8n/finpilot-workflows.json` is
+  structurally valid and points at the right API routes, but every one of
+  BUILD_TASKS.md T14's functional acceptance criteria — the bot replying to
+  a statement or a question, the scheduled workflows firing correctly —
+  is unverified because Docker wasn't available to run n8n locally.
 - **All Postgres SQL is unexecuted.** Syntax, enum creation, the RLS policy
   loop and the category seed are reviewed but never run *against Postgres*.
   Treat "42 rows" as a count of literals in the migration file. The SQLite
