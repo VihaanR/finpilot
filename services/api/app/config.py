@@ -17,9 +17,17 @@ class Settings(BaseSettings):
     # --- AI (Google Gemini, DESIGN.md 9.1) ---
     gemini_api_key: str = ""
     #: One model per job rather than one model everywhere: the jobs have
-    #: different latency and quality profiles. All are free-tier eligible.
-    gemini_model_chat: str = "gemini-3.8-flash"
-    gemini_model_summary: str = "gemini-2.5-pro"
+    #: different latency and quality profiles.
+    #:
+    #: Measured against a real key on 20 Sep 2026, and the reason chat and
+    #: summary share a model: every Gemini *Pro* model reports limit=0/day on
+    #: the free tier, and `gemini-2.5-pro` additionally 404s as "no longer
+    #: available to new users". `gemini-3.8-flash` works but allows only
+    #: 20 requests/day, and one question costs two or more calls.
+    #: `gemini-3.5-flash` supports function calling and has its own, larger
+    #: daily bucket, which is what makes the free tier usable at all.
+    gemini_model_chat: str = "gemini-3.5-flash"
+    gemini_model_summary: str = "gemini-3.5-flash"
     gemini_model_classify: str = "gemini-3.5-flash-lite"
     gemini_model_embedding: str = "gemini-embedding-2"
     #: gemini-embedding-2 emits 3072 dims and truncates cleanly via MRL.

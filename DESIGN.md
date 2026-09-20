@@ -479,14 +479,36 @@ model for everything, because the jobs have genuinely different shapes.
 
 | Use | Model | Why |
 |---|---|---|
-| Interactive chat loop | `gemini-3.8-flash` | Latency matters when a judge is typing |
-| Monthly summary generation | `gemini-2.5-pro` | Runs async; quality over speed |
+| Interactive chat loop | `gemini-3.5-flash` | Function calling, and a daily quota that makes the free tier usable |
+| Monthly summary generation | `gemini-3.5-flash` | Runs async; the figures are pre-computed, so the model only writes prose |
 | Batch categorisation | `gemini-3.5-flash-lite` | High volume, narrow structured task |
 | Receipt/bill extraction | `gemini-3.5-flash-lite` (vision) | Structured extraction from images |
 | Document embeddings | `gemini-embedding-2` | 768-dim output for pgvector search |
 
-All five are available on the Gemini API **free tier**, which is what the
-project runs on. Two consequences worth stating plainly:
+All are available on the Gemini API **free tier**, which is what the project
+runs on.
+
+> **Corrected 20 Sep 2026, measured against a real key.** This table first
+> routed chat to `gemini-3.8-flash` and the summary to `gemini-2.5-pro`.
+> Neither survives contact with the free tier:
+>
+> - `gemini-2.5-pro` returns **404 "no longer available to new users"**, and
+>   every Gemini *Pro* model reports **`limit: 0`/day** on the free tier. No
+>   Pro model is reachable without billing.
+> - Flash models enforce **two** quotas at once:
+>   `GenerateRequestsPerMinutePerProjectPerModel` = **5/min** and
+>   `GenerateRequestsPerDayPerProjectPerModel` = **20/day**. The daily one is
+>   the wall. One question costs two or more calls, so any single model id
+>   affords roughly **eight questions per day**.
+>
+> Chat and the summary therefore run on `gemini-3.5-flash`, which supports
+> function calling; the choice buys a bucket separate from the classifier's,
+> not a larger one. Each model id is its own quota, so swapping ids is the
+> cheapest way to find more headroom. Sustained volume — the §9.5 eval harness
+> at 25 questions — needs billing. Model ids live in `app/config.py`; nothing
+> else in the architecture moves.
+
+Two consequences worth stating plainly:
 
 - **Free-tier quotas are per Cloud project and are not raised by a consumer
   Google AI Plus / Pro / Ultra subscription.** Those cover the Gemini app, not
@@ -577,7 +599,7 @@ Three consequences, all of which are worth saying out loud in the demo:
 
 ### 9.6 Monthly summary generation
 
-Runs on `gemini-2.5-pro` with all engine outputs for the month pre-computed and supplied as structured input. Produces:
+Runs on `gemini-3.5-flash` (see the 9.1 correction note) with all engine outputs for the month pre-computed and supplied as structured input. Produces:
 
 - **Headline**: income, expense, net, savings rate
 - **Top movements**: three largest category changes vs the previous month, with figures

@@ -222,11 +222,11 @@ Implement DESIGN.md §8 in `services/api/app/engine/`. **Pure functions, no data
 Implement DESIGN.md §9.
 
 - `agent/tools.py` — all 11 tools, each typed, each returning `{data, citations}` with `citations[].txn_ids` populated
-- `agent/loop.py` — Gemini function-calling loop on `gemini-3.8-flash`, streaming, max 6 tool iterations
+- `agent/loop.py` — Gemini function-calling loop on `gemini-3.5-flash` (see the DESIGN.md §9.1 correction note), streaming, max 6 tool iterations
 - `agent/prompts.py` — system prompt encoding the grounding constraint, the citation requirement, the advice boundary, and the untrusted-document-text delimiter rule
 - `agent/guardrails.py` — post-generation advice-boundary check with the scripted decline from DESIGN.md §9.4
 - `privacy/redact.py` — every pattern in DESIGN.md §12.1, request-scoped reverse map, `ai_disclosures` row written on every call
-- `agent/summary.py` — monthly summary on `gemini-2.5-pro` from pre-computed engine output
+- `agent/summary.py` — monthly summary on `gemini-3.5-flash` from pre-computed engine output
 - `POST /api/agent/ask` (SSE), `POST /api/summary/generate`
 
 **Acceptance criteria**
@@ -421,7 +421,7 @@ See `SUBMISSION.md` for the timed script, form answers and judge test-script.
 | Behind at hour 12 | Cut T13 and T14. Never compress T12. |
 | PDF parsing eats the budget | Ship generic CSV + LLM fallback only. Demo the CSV path. State the limitation. |
 | T06 engine overruns | Cut `simulate.py` scope to goal-ETA-only (drop category sliders). It is the largest cuttable piece. |
-| Gemini free-tier rate limits (≈10 RPM) | Drop tier-2 categorisation to on-demand rather than bulk on ingest. Tier 1 already covers ~75%, and the narration-hash cache means each unique shape costs one call ever. |
+| Gemini free-tier limits (per **day** per model, not per minute — 20/day on `gemini-3.8-flash`, 0/day on any Pro model) | Switch the model id in `services/api/.env`; each model has a separate daily bucket. Also drop tier-2 categorisation to on-demand rather than bulk on ingest — tier 1 already covers 97.2%, and the narration-hash cache means each unique shape costs one call ever. |
 | Render cold starts hurt the demo | Record the video against localhost; keep production live for judges with the keep-alive ping. |
 | Ahead at hour 15 | Pull forward Scheme Match (DESIGN.md §14) — ~45 min, best remaining value per minute. |
 

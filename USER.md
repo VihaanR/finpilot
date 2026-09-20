@@ -46,8 +46,31 @@ That is fine — the build is designed for it:
   narration shape costs exactly **one** call for the life of the deployment
 - Classifying the entire 14-month seed dataset is roughly **19 calls**
 
-Free-tier limits are around **10 requests/minute** and a few hundred per day,
-varying by model. Check yours at `aistudio.google.com/rate-limit`.
+**Measured 20 Sep 2026, against your actual key.** The limit that bites is
+**per day, per model**, not per minute:
+
+| Model | Free-tier limit | Usable? |
+|---|---|---|
+| `gemini-3.5-flash` | 5/min **and 20/day** | **yes — chat and summary run here** |
+| `gemini-3.5-flash-lite` | 5/min and 20/day | yes — bulk classification |
+| `gemini-3.8-flash` | 5/min and 20/day | yes, but no better than 3.5 |
+| any Gemini **Pro** model | **0 per day** | no, needs billing |
+
+`gemini-2.5-pro` additionally returns 404, "no longer available to new users".
+
+**The daily cap is the one that will hurt you.** A chat question costs 2–3
+calls, so each model id is worth roughly **8 questions a day**. Each id is a
+separate bucket, so switching `GEMINI_MODEL_CHAT` in `services/api/.env` buys
+another 20 — but there is no free-tier configuration that survives a judge
+clicking around for ten minutes.
+
+**If you want the demo to be safe, enable billing** on the Cloud project
+(Tier 1). It is the difference between eight questions and a working product.
+Without it, record the video, and expect live judging to hit the wall.
+
+`gemini-2.5-pro` additionally returns 404, "no longer available to new users".
+
+Check your own at `aistudio.google.com/rate-limit`.
 
 **If you do hit the limit**, the contingency is already in BUILD_TASKS.md: drop
 tier-2 categorisation to on-demand instead of bulk-on-ingest. Tier 1 alone
@@ -344,7 +367,7 @@ The two moments where your attention is worth most: **hour 5–7** (engine corre
 | CORS errors after deploy | Vercel URL missing from `ALLOWED_ORIGINS` | §8d |
 | Auth redirect loop | Vercel URL missing from Supabase URL config | §8d |
 | Extension does nothing | Not logged into the web app in that browser | Log in; the app writes the snapshot |
-| Gemini 429s mid-build | Free-tier rate limit (~10 RPM) | Wait a minute, or switch tier-2 to on-demand (§1) |
+| Gemini 429s mid-build | Free-tier **daily** cap for that model, not a per-minute one | Switch the model id in `services/api/.env` (each model has its own daily bucket), or enable billing (§1) |
 | Expected Plus plan to lift API limits | Consumer subscriptions do not apply to the API | §1 — enable project billing for Tier 1, or stay on free |
 | n8n workflows silently no-op | Credential names don't match exactly | §6, step 2–3 |
 | Money figures slightly off | A float crept into a currency path | `grep` for float in engine; paise are integers (DESIGN.md §5.1) |

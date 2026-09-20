@@ -39,7 +39,7 @@ writes prose around figures the engine produced.
 - `services/api/app/{ingest,enrich,agent,privacy}/` — scaffolded, not yet built.
 - `apps/web/` — Next.js 15 App Router, Tailwind v4, Recharts.
 - Runtime inference is **Google Gemini** on the free tier, never Anthropic:
-  `gemini-3.8-flash` for chat, `gemini-2.5-pro` for the monthly summary,
+  `gemini-3.5-flash` for chat and the monthly summary,
   `gemini-3.5-flash-lite` for bulk classification and vision,
   `gemini-embedding-2` at 768 dims. Model IDs live in `app/config.py`.
 - `supabase/migrations/` — 4 migrations: enums, 14 tables, indexes + RLS,
@@ -85,8 +85,20 @@ file describes structure, not the day's state.
   DESIGN.md §4.1 and BUILD_TASKS.md T01 both specify 15. Also pass
   `--no-turbopack`, or the v15 scaffolder prompts and hangs non-interactively.
 - **A consumer Google AI Plus/Pro/Ultra plan does not raise Gemini *API* rate
-  limits.** API quota is per Cloud project and needs billing for Tier 1. Assume
-  free-tier limits (~10 RPM) and lean on the tier-1 rules plus the
-  narration-hash cache, which is what keeps call volume near zero.
+  limits.** API quota is per Cloud project and needs billing for Tier 1.
+- **The Gemini free tier allows ~20 requests per day, per model.** Measured
+  20 Sep 2026 against a real key. Every flash model enforces **two** quotas at
+  once — `GenerateRequestsPerMinutePerProjectPerModel` = **5/min** and
+  `GenerateRequestsPerDayPerProjectPerModel` = **20/day** — and the daily one
+  is the wall that ends the session. Gemini **Pro** models are **0/day**,
+  unreachable without billing; `gemini-2.5-pro` also 404s as "no longer
+  available to new users".
+
+  One chat question costs 2–3 calls, so a model id affords roughly **8
+  questions a day**. Each model id is a separate bucket, so switching
+  `GEMINI_MODEL_CHAT` in `services/api/.env` buys another 20. Anything
+  needing sustained volume — the T15 eval harness at 25 questions — needs
+  billing. `agent/loop.py` deliberately does **not** retry 429: on a daily cap
+  each retry spends another request to be told the same thing.
 - **`seed/output/` is gitignored; `seed/expected.json` is committed.** The eval
   harness reads the latter, so regenerating the seed can dirty the tree.
