@@ -53,6 +53,23 @@ def seed_demo_if_empty() -> None:
         demo.load(store, reset=False)
 
 
+@app.get("/", tags=["ops"])
+async def root() -> dict[str, object]:
+    """Service card.
+
+    The API URL ends up in a submission form and in browser address bars, so
+    a bare 404 there reads as a broken deployment. This says what the service
+    is and where to look instead.
+    """
+    return {
+        "service": "FinPilot API",
+        "status": "ok",
+        "docs": "/docs",
+        "health": "/health",
+        "note": "The deterministic engine computes every figure; the model only writes prose.",
+    }
+
+
 @app.get("/health", tags=["ops"])
 async def health() -> dict[str, str]:
     """Liveness probe.

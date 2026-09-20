@@ -32,6 +32,34 @@ Every line was run and observed in this session, from the repo root.
 - Secret scan over the 88 outgoing files: no keys, no `.env`, no `*.db`, and
   no Supabase project ref.
 
+**Production — the API is deployed and live**
+
+- `https://finpilot-w4ki.onrender.com/health` → `{"status":"ok"}`.
+- `/api/dashboard` on the deployed instance → `as_of 2026-09-19`, 3 accounts,
+  leak score **22** — identical to local. **The SQLite store self-seeded on
+  Render's blank ephemeral disk**, which is the mechanism the whole
+  no-database deploy rests on, now proven in production rather than simulated.
+- `/api/radar`, `/api/goals`, `/api/vault`, `/api/transactions`,
+  `/api/banks/password-hints` → all **200**.
+- `/api/agent/suggestions` → Gemini key present, AI consent granted, 4
+  questions. (Checked deliberately via the endpoint that reports readiness
+  *without* calling the model, to preserve quota for the video.)
+- **`ALLOWED_ORIGINS` is still the default `http://localhost:3000`.** A
+  preflight from a Vercel-style origin returns **400**. Until it is updated,
+  the deployed site will load and render nothing, with only a CORS error to
+  explain why. This is the §8d step, still outstanding.
+
+**The Render build failure, and what it actually was**
+
+The first deploy died on `psycopg-binary==3.2.3`, "no matching distribution",
+which reads as a bad pin. It was not: the wheel names said `cp314`. Render
+built on **Python 3.14**, for which psycopg-binary ships no wheels and has no
+sdist; `numpy==2.2.1` would have failed next. `render.yaml` does set
+`PYTHON_VERSION`, but **that file applies only to Blueprint deploys** and the
+service was created by hand in the dashboard, so it was never read.
+`services/api/.python-version` (3.11.13, the interpreter every pin is tested
+against) fixed it — the successful build shows `cp311` wheels throughout.
+
 **Tests and services**
 
 - `pytest services/api/tests/ evals/` → **326 passed**, zero failures. 25 live
