@@ -24,7 +24,7 @@ from typing import Any, Iterator
 from ..config import settings
 from ..services.views import Snapshot
 from . import guardrails, llm
-from .prompts import SYSTEM_PROMPT
+from .prompts import system_prompt
 from .tools import TOOL_DECLARATIONS, CitationRegistry, ToolContext, dispatch
 
 logger = logging.getLogger(__name__)
@@ -185,7 +185,7 @@ def run(
         prompt_text = f"{prompt_text}\n\n{guardrails.wrap_untrusted(document_text)}"
 
     messages: list[dict[str, Any]] = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt(snapshot.as_of)},
         {"role": "user", "content": prompt_text},
     ]
     tools = _decl_to_sdk(TOOL_DECLARATIONS)

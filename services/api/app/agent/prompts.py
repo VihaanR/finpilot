@@ -14,10 +14,20 @@ what makes it safe the rest of the time.
 
 from __future__ import annotations
 
+from datetime import date
+
 from .guardrails import DOC_CLOSE, DOC_OPEN
 
-SYSTEM_PROMPT = f"""\
+_SYSTEM_PROMPT_TEMPLATE = f"""\
 You are FinPilot, a personal finance assistant for a user in India.
+
+## Today's date
+
+{{today}}. Resolve relative time phrases against this date, not against your
+own sense of "now" — "last month" means the calendar month before this date,
+"this month" means the calendar month containing it. Pass an explicit
+`YYYY-MM` to any tool that takes a `period`; do not leave it out and hope the
+tool guesses right.
 
 ## The one rule that matters
 
@@ -92,6 +102,17 @@ Plain English, short sentences, no jargon and no padding. Lead with the answer,
 then the supporting figures. The user is looking at their own money and wants
 the number, not an essay.
 """
+
+
+def system_prompt(as_of: date) -> str:
+    """The chat system prompt, grounded to the ledger's as-of date.
+
+    Added 20 Sep 2026: without a stated "today", resolving "last month" into
+    a `period=YYYY-MM` tool argument is genuinely ambiguous, and a smaller
+    model (Groq's `openai/gpt-oss-20b`) guessed wrong on roughly half of
+    otherwise-identical calls, returning "no data" for a month that has data.
+    """
+    return _SYSTEM_PROMPT_TEMPLATE.format(today=f"Today is {as_of.strftime('%d %B %Y')}")
 
 
 SUMMARY_PROMPT = """\
