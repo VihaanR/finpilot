@@ -8,7 +8,8 @@ recurrence/anomaly engine by running it against the generated seed data;
 switched the runtime LLM provider from Anthropic to Google Gemini (free tier);
 then built **T04 ingestion**, **T05 tier-1 categorisation**, an **offline
 SQLite store** standing in for the unprovisioned Supabase, and the **full API
-route layer** on top of it. Frontend (T08–T11) is next and not yet started.
+route layer** on top of it, then the **frontend** (T08, T09, T11). All of it
+is now committed; T10 chat is the one route still missing.
 
 ## Verified state
 
@@ -16,9 +17,10 @@ Every line was run and observed in this session, from the repo root.
 
 **Repository**
 
-- `git rev-list --count HEAD` → **5 commits**, HEAD `1833ade`.
-- Working tree is **dirty**: T04/T05/store/routes are written but **not yet
-  committed**. `git status --short` shows 2 modified and 23 untracked paths.
+- `git rev-list --count HEAD` → **7 commits**, HEAD `f2b90ec`.
+- Working tree is **clean**: `git status --short` is empty. The session's work
+  landed as `e2467cb` (T04+T05, store, routes) and `f2b90ec` (T08+T09+T11),
+  61 files and 9,016 insertions between them.
 
 **Tests and services**
 
@@ -100,7 +102,7 @@ Playwright + Chromium.
 
 ## Completed recently
 
-- **T08 — frontend shell, design system, a11y foundation** (uncommitted).
+- **T08 — frontend shell, design system, a11y foundation** (`f2b90ec`).
   Green-and-beige glass in an "old money" register: warm paper ground, deep
   forest and brass, Fraunces for display and Inter for text. Contrast ratios
   are written next to each token in `globals.css`, light and dark both
@@ -111,12 +113,12 @@ Playwright + Chromium.
   mandatory wrapper — every chart ships a real `<table>` alternative with
   `scope` on its headers. `CitationChip` + one app-level `TransactionDrawer`
   give every figure a route to its rows.
-- **T09 — dashboard and upload** (uncommitted). Safe-to-Spend hero with the
+- **T09 — dashboard and upload** (`f2b90ec`). Safe-to-Spend hero with the
   committed figure as a citation, Leak Score half-dial (score printed and band
   named, never colour alone), income-vs-spending and category charts, anomaly
   cards with dismiss, a filterable transactions table with inline category
   override, and an SSE upload flow with per-bank password hints.
-- **T11 — radar, goals, vault** (uncommitted). The 30-day timeline grouped by
+- **T11 — radar, goals, vault** (`f2b90ec`). The 30-day timeline grouped by
   week with the 7-day banner; all six badges as keyboard-operable buttons that
   reveal the rule as real text rather than a hover-only tooltip; per-series
   Revoke Kit with copyable steps and email template. Goals with a What-If
@@ -135,7 +137,7 @@ Playwright + Chromium.
   collided, and dismissing one would have dismissed both. The key now carries
   a digest of the transaction ids. Found by React complaining about duplicate
   keys in the console.
-- **T04 — ingestion** (uncommitted). `normalize` (paise-exact money, channel
+- **T04 — ingestion** (`e2467cb`). `normalize` (paise-exact money, channel
   classification, VPA extraction, structural merchant extraction), `dedupe`
   (sha256 over account + date + amount + narration, deduping within a batch as
   well as against the store), an adapter registry tried in descending
@@ -143,12 +145,12 @@ Playwright + Chromium.
   decryption with per-bank password hints, and a generator-based `pipeline.run`
   that streams stage events for SSE. Merchant extraction was checked against
   the seed's own ground truth: **931 of 936** exact matches.
-- **T05 tier-1 — categorisation** (uncommitted). A 330-merchant dictionary plus
+- **T05 tier-1 — categorisation** (`e2467cb`). A 330-merchant dictionary plus
   structural rules (salary, EMIs, rent, ATM, interest, self-transfer, bank
   charges, SIPs, insurance, refunds) and a channel fallback, in that
   precedence. Tier-2 (`llm_classify`) is written and declines cleanly with no
   API key, so the product stays on tier 1 rather than failing.
-- **Offline store + API routes** (uncommitted). Raw-SQL SQLite mirroring the
+- **Offline store + API routes** (`e2467cb`). Raw-SQL SQLite mirroring the
   Postgres migration, deliberately *not* SQLAlchemy so the production
   Postgres-typed models stay untouched. On top of it: `/api/dashboard`,
   `/api/transactions` (+ tier-3 category override that rewrites past rows),
@@ -288,8 +290,8 @@ orchestrator fail-fast rule; everything since has been implemented directly.
   P0 route it would deploy exists and works.
 - **T13** Budget Guard extension, **T14** n8n workflows (both P1).
 - **T15** evals + axe-core, **T16** video + submission.
-- **Nothing since `1833ade` is committed.** The whole ingestion, store and
-  route layer is working-tree only.
+- **T10** is the only unbuilt frontend route; everything else built this
+  session is committed and the tree is clean.
 
 ## Unverified figures
 
