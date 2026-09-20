@@ -84,11 +84,27 @@ Playwright + Chromium.
   costs 2–3 calls, so one model id is worth roughly **8 questions a day**.
   Corrected in DESIGN.md §9.1, USER.md §1, CLAUDE.md and BUILD_TASKS.md.
 
-**Supabase, now reachable (was entirely unverified)**
+**Supabase, now migrated (was entirely unverified)**
 
 - `DATABASE_URL` connects: **PostgreSQL 17.6**, `pgvector` **enabled**.
-- `public` tables: **0**. The migrations have still never been applied, so
-  T02's three open criteria remain unmet. This is the next command to run.
+- All four migrations **applied cleanly**, one transaction per file, over
+  `DATABASE_URL` with psycopg. **14 public tables**, matching DESIGN.md §5.2.
+- `select count(*) from categories` → **42** (T02 requires > 40).
+- **RLS is on for all 14 tables**, and enforced, not merely enabled: inserting
+  one transaction for each of two auth users and then querying as each of them
+  (`set local role authenticated` + a `request.jwt.claims` sub) returns
+  `own=1, other=0, visible_total=1`. The unfiltered `count(*)` seeing 1 of 2
+  rows is the proof the policy filtered, rather than a `WHERE` clause doing it.
+- A duplicate `dedupe_key` raises `UniqueViolation` on
+  `transactions_dedupe_key_key`.
+- All 13 `user_id` columns carry a real FK to `auth.users` with
+  `ON DELETE CASCADE`. Worth recording because `information_schema` reports
+  them as *absent* — it hides constraints referencing a table you do not own,
+  and `auth.users` belongs to `supabase_auth_admin`. `pg_constraint` is the
+  honest source; the first check here was a false negative.
+
+**That closes the three open T02 acceptance criteria.** Test rows were deleted
+afterwards; the schema is empty of data.
 
 **Schema and engine invariants**
 
@@ -285,11 +301,11 @@ Playwright + Chromium.
 
 **External — needs a human, cannot be fixed by writing code:**
 
-- **Supabase project exists and is reachable, but the migrations have never
-  been applied.** PostgreSQL 17.6, `pgvector` enabled, **0 public tables**.
-  Three T02 criteria stay unmet until `npx supabase db push` runs: migrations
-  apply cleanly, a duplicate `dedupe_key` raises a unique violation, and a
-  query as user A returns zero rows of user B. This is the next command.
+- ~~No Supabase project / migrations never applied.~~ **Cleared 20 Sep 2026.**
+  The schema is live and all three open T02 criteria pass (see Verified state).
+  What remains is that the **app does not use it yet**: the routes still read
+  the offline SQLite store, so swapping the store dependency is now a real,
+  unblocked task rather than a hypothetical one.
 - **Docker Desktop daemon not running**, so a local Postgres+pgvector container
   was not available as a fallback for the above. Starting Docker Desktop would
   unblock migration testing without needing Supabase.
@@ -320,8 +336,11 @@ orchestrator fail-fast rule; everything since has been implemented directly.
 
 ## Still not done
 
-- **Apply the Supabase migrations.** The project exists and pgvector is on;
-  `public` tables is still 0. One command, and it closes three T02 criteria.
+- **Point the API at Supabase.** The schema is live and verified, but
+  `app/store/db.py` (SQLite) is still what the routes use. This is the swap
+  the store layer was designed for — the engine and views are unaffected
+  because neither knows how rows are fetched — and it is a prerequisite for
+  T12 deploying anything with real persistence.
 - **T12** deploy checkpoint — **the most valuable remaining task.** Every P0
   route it would deploy now exists and works, chat included.
 - **Enable Gemini billing (Tier 1)**, or accept ~8 chat questions per day in

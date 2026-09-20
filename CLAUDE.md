@@ -22,7 +22,9 @@ cd apps/web && npm run build     # must exit 0 with no type errors
 # Regenerate the demo dataset (pin --as-of, see gotchas)
 services/api/.venv/Scripts/python.exe seed/generate.py --seed 42 --as-of 2026-09-19
 
-# Apply migrations — UNVERIFIED, never run: no Supabase project exists yet
+# Apply migrations. The four files were applied 20 Sep 2026 over DATABASE_URL
+# with psycopg (one transaction per file) — that path is verified. The npx
+# path below is still UNVERIFIED; it needs the Supabase CLI and a login.
 npx supabase link --project-ref <ref> && npx supabase db push
 ```
 
