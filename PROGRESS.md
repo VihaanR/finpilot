@@ -1,5 +1,15 @@
 # FinPilot progress ledger
 
+> **Time budget, set by the owner 20 Sep 2026: ~6 hours remaining** before
+> submission. Core product (T01–T12, T15) is done and live — this budget is
+> for the optional P1 items (T13 extension, T14 n8n) and recording T16, not
+> for finishing anything load-bearing. If time runs short, **T16 (record +
+> submit) wins over any partial P1 work** — a working, deployed, un-recorded
+> product scores worse than a recorded one, per BUILD_TASKS.md's own
+> scheduling rule. This ledger is updated after every change from here on,
+> so re-read this file first if resuming mid-session.
+
+
 Repo: `V:\Projects\FinPilot` — https://github.com/VihaanR/finpilot (public)
 Design: `DESIGN.md` · Tasks: `BUILD_TASKS.md` · Human steps: `USER.md`
 Session: 19–20 Sep 2026 — built T01–T06 from a bare repo of planning docs,
