@@ -479,8 +479,8 @@ the jobs have genuinely different shapes.
 
 | Use | Model | Why |
 |---|---|---|
-| Interactive chat loop | `llama-3.1-8b-instant` (Groq) | Function calling, and a rate limit that isn't a hard daily wall |
-| Monthly summary generation | `llama-3.1-8b-instant` (Groq) | Runs async; the figures are pre-computed, so the model only writes prose |
+| Interactive chat loop | `openai/gpt-oss-20b` (Groq) | Function calling, and a rate limit that isn't a hard daily wall |
+| Monthly summary generation | `openai/gpt-oss-20b` (Groq) | Runs async; the figures are pre-computed, so the model only writes prose |
 | Batch categorisation | `gemini-3.5-flash-lite` (Gemini) | High volume, narrow structured task |
 | Receipt/bill extraction | `gemini-3.5-flash-lite` (vision, Gemini) | Structured extraction from images |
 | Document embeddings | `gemini-embedding-2` (Gemini) | 768-dim output for pgvector search |
@@ -489,7 +489,7 @@ the jobs have genuinely different shapes.
 > Gemini to Groq after the 20-requests/day Gemini free-tier cap (see the
 > correction note below) ran out mid-demo-prep, with no headroom left for
 > recording. Groq's free tier is rate-limited per minute rather than gated by
-> a hard daily wall, and `llama-3.1-8b-instant` supports the same
+> a hard daily wall, and `openai/gpt-oss-20b` supports the same
 > function-calling shape `agent/loop.py` already drives by hand — exactly the
 > provider-agnostic swap the closing paragraph of this section anticipated.
 > Batch categorisation, the PDF LLM-fallback adapter, and embeddings stay on
@@ -607,7 +607,7 @@ Three consequences, all of which are worth saying out loud in the demo:
 
 ### 9.6 Monthly summary generation
 
-Runs on `llama-3.1-8b-instant` via Groq (see the 9.1 correction note) with all engine outputs for the month pre-computed and supplied as structured input. Produces:
+Runs on `openai/gpt-oss-20b` via Groq (see the 9.1 correction note) with all engine outputs for the month pre-computed and supplied as structured input. Produces:
 
 - **Headline**: income, expense, net, savings rate
 - **Top movements**: three largest category changes vs the previous month, with figures

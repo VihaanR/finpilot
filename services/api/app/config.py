@@ -30,11 +30,11 @@ class Settings(BaseSettings):
     #: Gemini free tier's 20-requests/day cap was exhausted mid-demo-prep and
     #: is per Cloud project, not something a consumer Google AI plan raises).
     #: Groq's free tier is rate-limited per minute, not a hard daily wall, and
-    #: `llama-3.1-8b-instant` supports the same function-calling shape the
+    #: `openai/gpt-oss-20b` supports the same function-calling shape the
     #: agent loop already drives by hand.
     groq_api_key: str = ""
-    groq_model_chat: str = "llama-3.1-8b-instant"
-    groq_model_summary: str = "llama-3.1-8b-instant"
+    groq_model_chat: str = "openai/gpt-oss-20b"
+    groq_model_summary: str = "openai/gpt-oss-20b"
 
     #: Google Gemini stays for bulk categorisation (enrich/llm_classify.py),
     #: the PDF LLM-fallback adapter, and embeddings — none of which this
