@@ -122,5 +122,12 @@ file describes structure, not the day's state.
   disclosure log had one row in it. When you change a route's payload, grep
   `lib/types.ts` for the shape and run the Playwright suite — `npm run build`
   cannot catch this class of bug.
+- **`render.yaml` only applies to Blueprint deploys.** A Render service
+  created by hand in the dashboard ignores it entirely, including
+  `PYTHON_VERSION` — the build then runs on Render's current default (3.14 as
+  of 20 Sep 2026) and dies on `psycopg-binary`, which ships no 3.14 wheels and
+  has no sdist. `services/api/.python-version` pins 3.11.13 and is read
+  whichever way the service was made. The failure names psycopg; the cause is
+  the interpreter, and the only clue is `cp314` in the wheel filenames.
 - **`seed/output/` is gitignored; `seed/expected.json` is committed.** The eval
   harness reads the latter, so regenerating the seed can dirty the tree.

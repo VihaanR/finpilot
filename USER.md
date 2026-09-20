@@ -244,6 +244,27 @@ SQLite store (§8e). The schema is ready for when it does.
 6. **Environment** → add every variable from `services/api/.env`
 7. Deploy, wait ~3 minutes, then confirm `https://<your-service>.onrender.com/health` returns `{"status":"ok"}`
 
+> **The Python version is the one thing that will break this build.**
+>
+> `render.yaml` sets `PYTHON_VERSION`, but **that file only applies to
+> Blueprint deploys**. A service created by hand through the dashboard — which
+> is what the steps above do — never reads it, so Render falls back to its
+> current default. On 20 Sep 2026 that default was **Python 3.14**, and the
+> build died on `psycopg-binary==3.2.3`: there are no 3.14 wheels for it, and
+> it is binary-only so there is no source fallback. `numpy==2.2.1` would have
+> failed next for the same reason. The error names psycopg and looks like a
+> bad pin; the actual cause is the interpreter, visible only as `cp314` in the
+> wheel filenames scrolling past.
+>
+> `services/api/.python-version` now pins **3.11.13**, which Render reads from
+> the service's root directory regardless of how the service was created. If
+> Render rejects that exact patch release, set the **`PYTHON_VERSION`**
+> environment variable in the dashboard to `3.11` and redeploy.
+>
+> Do not "fix" this by unpinning psycopg. The pins are consistent with 3.11;
+> chasing them one at a time onto a newer interpreter is a much longer
+> afternoon than pinning the interpreter once.
+
 **Free tier sleeps after 15 minutes of inactivity and takes ~40 seconds to wake.** A judge hitting a cold start will assume the product is broken. Fix it:
 
 - `cron-job.org` (free) → new job → your `/health` URL → every 10 minutes
