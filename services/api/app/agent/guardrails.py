@@ -49,6 +49,40 @@ _ADVICE_PATTERNS = (
 
 _ADVICE_RE = re.compile("|".join(_ADVICE_PATTERNS), re.I)
 
+#: Questions that ask for a product recommendation. Matched on the *question*,
+#: before any model call.
+#:
+#: Checking the question as well as the answer is what makes the decline
+#: deterministic. Left to the post-generation check alone, the behaviour
+#: depends on how the model happens to phrase its refusal: a model that
+#: declines in its own words produces a correct outcome that the advice
+#: patterns cannot recognise, because a refusal contains no advice. DESIGN.md
+#: §9.4 specifies *the scripted decline*, not "some refusal", so the scripted
+#: text is returned here directly. It also costs no quota.
+#:
+#: The object list is deliberately narrow. "Should I cancel Netflix?" is a
+#: question about the user's own spending and squarely in scope; only
+#: investable products are matched.
+_ADVICE_OBJECT = (
+    r"(?:mutual funds?|index funds?|stocks?|shares?|equit(?:y|ies)|"
+    r"sips?|elss|ppf|nps|fixed deposits?|fds?|rds?|bonds?|gold|crypto|"
+    r"bitcoin|insurance polic(?:y|ies)|ulips?|portfolios?)"
+)
+_ADVICE_REQUEST_RE = re.compile(
+    r"(?:"
+    rf"\b(?:should|shall|ought|can|do)\s+(?:i|we|you)\b[^?.!]{{0,60}}\b(?:invest|buy|put money|start)\b[^?.!]{{0,40}}{_ADVICE_OBJECT}"
+    rf"|\b(?:recommend|suggest|advise|advice on|best|which)\b[^?.!]{{0,40}}{_ADVICE_OBJECT}"
+    rf"|{_ADVICE_OBJECT}[^?.!]{{0,30}}\b(?:worth it|good idea|better returns?)\b"
+    rf"|\bwhere should i invest\b"
+    r")",
+    re.I,
+)
+
+
+def is_advice_request(question: str) -> bool:
+    """Is the user asking for a financial-product recommendation?"""
+    return bool(question) and _ADVICE_REQUEST_RE.search(question) is not None
+
 #: A rupee figure in the model's prose: Rs 1,234, ₹1,234.56, or "1,234 rupees".
 _FIGURE_RE = re.compile(r"(?:₹|\bRs\.?\s?)\s?[\d,]+(?:\.\d{1,2})?|\b[\d,]{3,}\s*rupees\b", re.I)
 

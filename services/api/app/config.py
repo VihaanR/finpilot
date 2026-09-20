@@ -6,12 +6,23 @@ real secret, and `.env` is git-ignored (DESIGN.md section 12.2).
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+#: Anchored to this file, not to the working directory.
+#:
+#: `env_file=".env"` resolves against the *cwd*, so settings loaded only when
+#: the process happened to start inside `services/api`. Uvicorn does, which is
+#: why this went unnoticed; pytest runs from the repo root and silently got an
+#: empty key -- no error, just a product that behaved as though no key existed.
+#: A path that depends on where you were standing is not configuration.
+_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+        env_file=_ENV_FILE, env_file_encoding="utf-8", extra="ignore"
     )
 
     # --- AI (Google Gemini, DESIGN.md 9.1) ---

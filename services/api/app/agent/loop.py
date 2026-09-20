@@ -144,6 +144,23 @@ def run(
     ctx = ToolContext(snapshot=snapshot, citations=registry)
     answer = AgentAnswer()
 
+    # The advice boundary is checked on the question first, so the decline is
+    # deterministic rather than dependent on how the model phrases a refusal
+    # (DESIGN.md 9.4). It also short-circuits before any model call, which on
+    # a 20/day free tier is not a small thing.
+    if guardrails.is_advice_request(question):
+        yield {"type": "text", "text": guardrails.ADVICE_DECLINE, "declined": True}
+        yield {
+            "type": "done",
+            "citations": [],
+            "tools_used": [],
+            "declined": True,
+            "uncited_figures": [],
+            "unknown_citation_ids": [],
+            "error": None,
+        }
+        return
+
     if not llm.available():
         answer.error = (
             "Chat needs a Gemini API key, which isn't configured. "

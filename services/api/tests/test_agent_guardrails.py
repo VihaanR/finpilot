@@ -53,6 +53,43 @@ def test_descriptions_and_nudges_are_not_declined(text: str) -> None:
     assert verdict.text == text
 
 
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Should I invest in mutual funds?",
+        "should i put money in an index fund",
+        "Can I buy some stocks with my surplus?",
+        "Which ELSS is best for me?",
+        "Recommend a fixed deposit",
+        "Is gold worth it right now?",
+        "Where should I invest?",
+        "What do you suggest for my portfolio?",
+    ],
+)
+def test_advice_seeking_questions_are_recognised(question: str) -> None:
+    assert G.is_advice_request(question), question
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        # All of these are about the user's OWN money and are squarely in scope.
+        "Should I cancel Netflix?",
+        "Can I afford a 40,000 rupee phone this month?",
+        "Where did I spend the most last month?",
+        "How much am I putting into my SIP each month?",
+        "What is my SIP costing me?",
+        "Should I be worried about my spending?",
+        "How much of my budget is already committed?",
+        "Which subscriptions am I paying for without realising?",
+        "Did my insurance policy premium go up?",
+    ],
+)
+def test_in_scope_questions_are_not_declined(question: str) -> None:
+    """The boundary must not swallow the product's actual job."""
+    assert not G.is_advice_request(question), question
+
+
 def test_the_scripted_decline_pivots_to_data() -> None:
     """A bare refusal reads as evasion; DESIGN.md 9.4 requires the pivot."""
     assert "can't make investment" in G.ADVICE_DECLINE
