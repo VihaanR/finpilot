@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .deps import get_store
-from .routes import data, ingest, insights, vault
+from .routes import agent, data, ingest, insights, vault
 from .store import demo
 
 app = FastAPI(
@@ -33,6 +33,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(agent.router)
 app.include_router(data.router)
 app.include_router(ingest.router)
 app.include_router(insights.router)
