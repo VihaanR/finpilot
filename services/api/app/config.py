@@ -66,7 +66,21 @@ class Settings(BaseSettings):
 
     @property
     def allowed_origins_list(self) -> list[str]:
-        return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+        """Comma-separated origins, normalised.
+
+        `CORSMiddleware` matches the browser's `Origin` header by exact
+        string equality, and a browser's `Origin` never carries a trailing
+        slash. A value pasted straight from an address bar almost always
+        does, and the failure mode is silent: no error, no log line, just
+        CORS quietly rejecting the deployed frontend (found live, 20 Sep
+        2026, against `.../vercel.app/`). Stripping a trailing slash here
+        makes that specific paste-in mistake impossible to reintroduce.
+        """
+        return [
+            o.strip().rstrip("/")
+            for o in self.allowed_origins.split(",")
+            if o.strip()
+        ]
 
 
 settings = Settings()
