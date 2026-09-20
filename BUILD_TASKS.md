@@ -221,7 +221,7 @@ Implement DESIGN.md §8 in `services/api/app/engine/`. **Pure functions, no data
 
 Implement DESIGN.md §9.
 
-- `agent/tools.py` — all 11 tools, each typed, each returning `{data, citations}` with `citations[].txn_ids` populated
+- `agent/tools.py` — all 11 tools, each typed, each returning `{data, citations}` with `citations[].txn_ids` populated *(since T17: 12 read tools plus 3 act-mode staging tools — see DESIGN.md §9.7)*
 - `agent/loop.py` — Gemini function-calling loop on `gemini-3.5-flash` (see the DESIGN.md §9.1 correction note), streaming, max 6 tool iterations
 - `agent/prompts.py` — system prompt encoding the grounding constraint, the citation requirement, the advice boundary, and the untrusted-document-text delimiter rule
 - `agent/guardrails.py` — post-generation advice-boundary check with the scripted decline from DESIGN.md §9.4
@@ -464,6 +464,44 @@ Build the workflows in DESIGN.md §10.6 in a local Docker n8n, then export.
 - axe-core: zero violations on every route in both themes
 - NVDA pass documented in `/accessibility` with date and findings
 - Keyboard-only walkthrough of the primary flow completes without a mouse
+
+---
+
+## T17 — Agentic dashboard panel · [O] · 90 min · **done 20 Sep 2026**
+
+Added after T15, on the observation that the product could explain the ledger
+but not change it — and that goals had no creation path at all. See DESIGN.md
+§9.7.
+
+- Dashboard panel handling multi-step mutating requests in one sentence
+- `propose_*` tools staging into an `ActionRegistry`; nothing applied by the model
+- `POST /api/agent/act` (staging) and `POST /api/agent/actions/apply` (the only writer)
+- Deterministic `app/agent/money.py` for Indian amount units
+- Reversible soft delete via a `deleted_transactions` side table
+- Browser extension reports interstitial outcomes to `POST /api/guard/events`
+
+**Acceptance criteria**
+- "Set up a goal of getting a car of 50L and remove the duplicated charge"
+  produces two action cards, applied only on click
+- A goal created this way appears on `/goals` with a real projection
+- A removed transaction disappears from **both** the dashboard and the
+  transactions table, and can be restored
+- `/api/agent/ask` cannot stage an action, and the 25 eval goldens are unchanged
+- The apply endpoint rejects a bad unit, an unknown action kind and an
+  invented transaction id
+- axe: zero violations on `/` in both themes with the panel present
+
+> **Met, with one exception.** `pytest` exit 0, Playwright 36/36, CI green.
+> Verified against real seed data: goal created at exactly ₹50,00,000; the
+> duplicate BIGBASKET charge found via `detect_anomalies` →
+> `get_anomaly_transactions` → staged delete; apply removed it (936 → 935)
+> from engine and views alike; restore returned it; all three validation
+> rejections confirmed.
+>
+> **Unverified:** the live model actually selecting the right tools for the
+> headline sentence. Every deterministic layer beneath it is tested; that call
+> was skipped to preserve Groq quota for the recording. It is the one thing to
+> try by hand before the video (USER.md §3).
 
 ---
 

@@ -11,6 +11,7 @@ Mandatory deliverable. Three minutes is **short** — that's roughly 450 spoken 
 - **Show working software.** No mockups, no slides beyond a title card, no sped-up fake typing. Judges can tell.
 - **Lead with the fact, not the pitch.** "Your auto-debits now fire without asking you" beats "FinPilot is an AI-powered platform."
 - **The citation click is the most important two seconds in the video.** It is the visible proof that the numbers are real.
+- **The agentic panel is the headline.** This is a hackathon about agents. One sentence doing two unrelated things — creating a goal *and* removing a duplicate — is the strongest thirty seconds you have. Give it room.
 - **Record against localhost** if Render is sluggish. Keep production live separately for the judges.
 
 ### Timed script
@@ -19,17 +20,18 @@ Mandatory deliverable. Three minutes is **short** — that's roughly 450 spoken 
 |---|---|---|
 | **0:00–0:20** | Title card → dashboard | "Under RBI's e-mandate framework, any recurring debit up to fifteen thousand rupees goes through with no OTP. No confirmation. Most people's subscriptions and auto-debits now leave their account silently. FinPilot is a finance agent built around that problem." |
 | **0:20–0:50** | Drag a statement in, progress runs, dashboard fills | "Upload a bank statement — password-protected PDFs included. It parses, categorises, and detects recurring payments automatically. That's real parsing, not a fixture." |
-| **0:50–1:20** | Chat: ask three questions, then **click a number** | "Ask it anything. Where did I spend the most? Which subscriptions am I paying for? What went up since last month? And here's the part that matters — *click*. Every number is clickable, down to the exact transactions behind it. The language model never does arithmetic. A Python engine computes; the model only explains. That's why it can't hallucinate a figure." |
-| **1:20–1:50** | Mandate Radar, badges visible | "Mandate Radar. Nine recurring payments found. This one's tagged Silent — under fifteen thousand, so it'll debit without asking. This one went up eighteen percent and nobody told you. These two are duplicate music subscriptions. RBI requires a twenty-four hour warning. We give you seven days — and the exact steps to cancel." |
-| **1:50–2:20** | Simulator: toggle subscriptions, ETA moves | "Goals connect to spending. Cancel these three, cut food delivery thirty percent — and the emergency fund lands in March instead of July. That's computed from the actual ledger, not estimated." |
-| **2:20–2:40** | Switch to Amazon, cart, interstitial fires | "It follows you to checkout. Budget Guard is a browser extension — this twelve-thousand-rupee purchase would push the emergency fund out by three months. Continue, or wait twenty-four hours." |
-| **2:40–3:00** | Data Vault → accessibility page | "Every AI call is logged with exactly what left your device — account numbers never do. Erase and export actually work, built against DPDP Rules 2025. And the whole thing is WCAG 2.1 AA, because in April 2025 the Supreme Court held that digital accessibility is part of Article 21 — in a case about banking. FinPilot." |
+| **0:50–1:15** | Dashboard panel: type the one sentence, cards appear, click Apply | "Now tell it what to do. *One sentence* — set up a goal for a car at fifty lakh, and remove this charge, it's been billed twice. It works out the steps itself: it finds the duplicate in the ledger, and it stages both changes as cards. Nothing happens until I approve it. *Apply.* The goal is live with a real projection, and the duplicate's gone." |
+| **1:15–1:35** | Chat: one question, then **click a number** | "Ask it anything — and here's the part that matters, *click*. Every number opens to the exact transactions behind it. The language model never does arithmetic: a Python engine computes, the model only explains and selects. It doesn't even convert *fifty lakh* into rupees — that's Python too. That's why it can't hallucinate a figure." |
+| **1:35–2:00** | Mandate Radar, badges visible | "Mandate Radar. Nine recurring payments found. This one's tagged Silent — under fifteen thousand, so it'll debit without asking. This one went up eighteen percent and nobody told you. These two are duplicate music subscriptions. RBI requires a twenty-four hour warning. We give you seven days — and the exact steps to cancel." |
+| **2:00–2:25** | Simulator: toggle subscriptions, ETA moves | "Goals connect to spending. Cancel these three, cut food delivery thirty percent — and the emergency fund lands in March instead of July. That's computed from the actual ledger, not estimated." |
+| **2:25–2:42** | Switch to Amazon, cart, interstitial fires | "It follows you to checkout. Budget Guard is a browser extension — this twelve-thousand-rupee purchase would push the emergency fund out by three months. Continue, or wait twenty-four hours." |
+| **2:42–3:00** | Data Vault → accessibility page | "Every AI call is logged with exactly what left your device — account numbers never do. Erase and export actually work, built against DPDP Rules 2025. And the whole thing is WCAG 2.1 AA, because in April 2025 the Supreme Court held that digital accessibility is part of Article 21 — in a case about banking. FinPilot." |
 
 **Word count ≈ 430.** Speak at a normal pace; do not rush to fit more in.
 
 ### If you're over time
 
-Cut in this order: the extension beat (0:20) → the third chat question (0:08) → tighten the upload narration (0:10). Never cut the citation click or Mandate Radar.
+Cut in this order: the simulator beat (0:25) → the extension beat (0:17) → tighten the upload narration (0:10). **Never cut the agentic panel, the citation click, or Mandate Radar** — those three are the whole argument.
 
 ### Recording checklist
 
@@ -37,6 +39,7 @@ Cut in this order: the extension beat (0:20) → the third chat question (0:08) 
 - [ ] 1920×1080, browser zoom 100%, no bookmarks bar
 - [ ] Notifications off (Windows Focus Assist)
 - [ ] Amazon cart pre-loaded in tab 2
+- [ ] **Run the agentic sentence once before recording.** Every layer under it is tested, but the model picking the right tools for your exact phrasing is the one thing no test covers — and it's the beat you cannot afford to have fail on camera.
 - [ ] One silent dry run to find the dead air
 - [ ] Mic levels tested
 - [ ] Upload → Drive → **Share → Anyone with the link → Viewer**
@@ -53,20 +56,28 @@ Cut in this order: the extension beat (0:20) → the third chat question (0:08) 
 Google Drive link. **Sharing verified in an incognito window.**
 
 ### Agent Access Link
-Your Vercel URL, e.g. `https://finpilot.vercel.app`
 
-Before pasting it: open it in a fresh incognito window and confirm the login page loads in under three seconds. If Render is cold, your keep-alive ping isn't running (USER.md §8b).
+```
+https://finpilot-swart.vercel.app
+```
+
+Before pasting it: open it in a fresh **incognito** window and confirm the populated dashboard loads in under three seconds. If Render is cold, the keep-alive ping isn't running.
+
+> ⚠️ **Never paste a Vercel *preview* URL.** Preview deployments sit behind Vercel's SSO wall and show a Vercel login screen to anyone without a Vercel session — a judge would see a wall, not the product. Only the production URL above is public.
 
 ### Agent Credentials
-```
-Username: demo@finpilot.in
-Password: FinPilot@2026
 
-Pre-loaded with 14 months of sample data. A "Reset demo data" button
-on the dashboard restores a clean state between test runs.
+```
+None. There is no login.
+
+The link opens straight onto a populated dashboard with 14 months of
+sample data. A "Reset demo data" button on the dashboard restores a
+clean state between test runs.
 ```
 
-The reset note matters — the form says the team will test 2–3 times, and it tells them their runs won't interfere with each other.
+**Say "none" explicitly rather than leaving the field blank** — a blank field reads as an oversight, and a judge who expects a login may go looking for one.
+
+This build deliberately has no authentication (DESIGN.md, PROGRESS.md § reference): building auth on the last day would have risked a working product for a login screen standing between a judge and the thing being judged. The reset note matters too — the form says the team will test 2–3 times, and it tells them their runs won't interfere with each other.
 
 ### Additional Materials
 
@@ -80,7 +91,7 @@ LLM call, and the regulatory basis for each India-specific feature.
 n8n/finpilot-workflows.json — 4 workflows: Telegram ingestion and Q&A,
 daily brief, mandate alerts, monthly summary.
 
-apps/extension — "Budget Guard", an MV3 Chrome extension that intercepts
+extension/ — "Budget Guard", an MV3 Chrome extension that intercepts
 over-budget checkouts on Amazon and Flipkart. Load unpacked (install
 instructions in USER.md); not Web Store published within the hackathon window.
 

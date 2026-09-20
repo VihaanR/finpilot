@@ -54,3 +54,24 @@ total, timestamp — no product details, no transaction data), and the chosen
 `apiBase`. No account numbers, merchant names, or transaction ids ever reach
 it — verify with `chrome://extensions` → Details → "Inspect views" →
 Application → Storage.
+
+## Reporting back to FinPilot
+
+Since 20 Sep 2026 the extension is no longer a dead end. When the interstitial
+is answered, `background.js` POSTs the outcome to `/api/guard/events` on the
+FinPilot API, and the web app's dashboard shows a **Budget Guard** card
+summarising what was stopped. The agent can be asked about it too
+("what did Budget Guard stop this month?").
+
+All three outcomes are reported — `wait`, `continue` and `dismiss` — not just
+the ones that stopped a purchase, because "you were warned and went ahead
+anyway" is the more interesting half of that signal.
+
+**What is deliberately not sent:** the page URL and anything about the cart's
+contents. The server has no use for them, and the local cooldown record
+already holds what the extension itself needs. Only the retailer, the outcome,
+and the two amounts that were compared leave the browser.
+
+The POST is best-effort. The local cooldown is written first and never depends
+on it, so if the API is asleep or unreachable the guard still works — the
+intercept simply doesn't appear on the dashboard.

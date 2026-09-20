@@ -1,22 +1,21 @@
 # FinPilot progress ledger
 
-> **Time budget, set by the owner 20 Sep 2026: ~6 hours remaining as of the
-> start of this session's second half.** Core product (T01–T12, T15) is done
-> and live, chat is solid (the Gemini-quota wall is resolved — see the Groq
-> switch below), and both optional P1 items (T13 extension, T14 n8n) are now
-> built — code-complete and largely verified, with the remaining gaps being
-> owner-side manual checks (a real Amazon/Flipkart cart for T13; Docker +
-> a Telegram bot for T14 — see Completed recently for exactly what's left).
-> Remaining budget is for those two checks and recording T16. If time runs
-> short, **T16 (record + submit) wins over any partial P1 work** — a
-> working, deployed, un-recorded product scores worse than a recorded one,
-> per BUILD_TASKS.md's own scheduling rule. This ledger is updated after
-> every change from here on, so re-read this file first if resuming
-> mid-session.
-
+> **State as of 20 Sep 2026.** The product is **built, deployed and live**.
+> T01–T15 are done, both optional P1 items (T13 Budget Guard, T14 n8n) are
+> built, and **T17 — the agentic dashboard panel** is in. What remains is
+> owner-side only and lives in `USER.md`: test the extension on a real cart,
+> optionally wire up n8n + Telegram, record the video, submit.
+>
+> If time runs short, **recording and submitting beat any remaining P1 work** —
+> a working, deployed, un-recorded product scores worse than a recorded one,
+> per BUILD_TASKS.md's own scheduling rule.
+>
+> This file is the ledger: what was built, what was measured, what is still
+> unverified, plus the deployment and environment **reference** at the bottom.
+> Re-read it first if resuming mid-session.
 
 Repo: `V:\Projects\FinPilot` — https://github.com/VihaanR/finpilot (public)
-Design: `DESIGN.md` · Tasks: `BUILD_TASKS.md` · Human steps: `USER.md`
+Design: `DESIGN.md` · Tasks: `BUILD_TASKS.md` · **What is left for the owner: `USER.md`**
 Session: 19–20 Sep 2026 — built T01–T06 from a bare repo of planning docs,
 then **T04 ingestion**, **T05 tier-1**, an **offline SQLite store** standing in
 for Supabase, the **full API route layer**, the **frontend** (T08, T09, T11),
@@ -100,14 +99,15 @@ against) fixed it — the successful build shows `cp311` wheels throughout.
 - `pytest services/api/tests/ evals/` → **326 passed**, zero failures. 25 live
   eval cases skip by default (they need model quota; see below).
 - `cd apps/web && npm run build` → 12/12 static pages, no type errors.
-- `npx playwright test --grep-invert @quota` → **30/30 pass** against the
+- `npx playwright test --grep-invert @quota` → **36/36 pass** against the
   production build with the API live: 8 routes × 2 themes of axe (0
-  violations), skip-link first on every route, no horizontal scroll at a 640px
-  viewport, and 11 Budget Guard specs (cart-total parser, 24-hour cooldown,
-  interstitial a11y contract). The live chat spec is the `@quota` one excluded
-  here; with it, 31/31 —
-  streamed answer, `aria-busy` toggling, citation chip opening the drawer,
-  Escape returning focus to the chip, 0 axe violations on the answered page.
+  violations, the agentic panel and Budget Guard card included), skip-link
+  first on every route, no horizontal scroll at a 640px viewport, and 17
+  Budget Guard specs (cart-total parser, EMI-panel false positive, 24-hour
+  cooldown, click interception, interstitial a11y contract). The live chat
+  spec is the `@quota` one excluded here — streamed answer, `aria-busy`
+  toggling, citation chip opening the drawer, Escape returning focus to the
+  chip, 0 axe violations on the answered page.
 - `POST /api/demo/reset` → ledger returns to **936** transactions, clearing a
   test upload. That is a T12 acceptance criterion, met early.
 - `GET /health` on a live uvicorn → `{"status":"ok"}`, HTTP 200.
@@ -213,6 +213,76 @@ afterwards; the schema is empty of data.
   1 `price_hike`, 1 `new_large_merchant`).
 
 ## Completed recently
+
+- **T17 — the agentic dashboard panel, agentic goals, and extension
+  telemetry** (`f546e1c`). The agent could answer questions but not *do*
+  anything, and goals could not be created at all — for a hackathon judged on
+  agentic capability the product demonstrated retrieval, not agency. The
+  dashboard is now the agentic surface; `/chat` stays read-only for questions.
+
+  **Stage-then-confirm, not execute.** The model calls `propose_*` tools that
+  stage actions into an `ActionRegistry` (mirroring `CitationRegistry`); the
+  SSE `done` event carries them; the UI renders action cards with Apply;
+  `POST /api/agent/actions/apply` is the only thing that writes, and it
+  re-validates every parameter from scratch rather than trusting what the
+  client echoes back. The model selects; deterministic Python computes and
+  mutates — DESIGN.md §9's load-bearing claim survives a feature that changes
+  the ledger.
+
+  Three decisions worth recording, because each one was forced by something
+  already in the codebase:
+
+  1. **`"50L"` → paise is itself a computation the model is forbidden from
+     doing.** `propose_create_goal` therefore takes the tokens the user said
+     (`amount_value=50, amount_unit="lakh"`) and `app/agent/money.py` converts.
+     Getting this wrong by a factor of a hundred is the one arithmetic error
+     here a user would act on, so it has its own test file.
+  2. **The prose must not restate the amount.** A user-supplied figure has no
+     citation to attach, so repeating it in the answer trips
+     `audit_citations`'s uncited-figure check. The prompt tells the model to
+     describe the action and let the card carry the number as structured data.
+  3. **`detect_anomalies` could not reach a deletable id.** It reports only a
+     count — the duplicate-charge `txn_ids` live on the citation, deliberately
+     invisible to the model — so "remove this duplicated charge" was
+     impossible as written. `get_anomaly_transactions` bridges anomaly → ids
+     without widening the citation privacy boundary.
+
+  **Act mode is a separate endpoint** (`POST /api/agent/act`) rather than a
+  flag on `/api/agent/ask`, so the read-only chat surface cannot stage a
+  change and the 25 eval goldens keep their exact behaviour. The staging tools
+  are only reachable when the tool context carries an `ActionRegistry`;
+  `test_act_tools_are_unreachable_without_an_action_registry` pins that.
+
+  **Transaction removal is a `deleted_transactions` side table**, following
+  the `dismissals` precedent rather than altering the `transactions` schema.
+  Ingested rows stay byte-identical and a removal is undone by deleting one
+  row. Filtered out of *both* `transactions()` and `engine_txns()` — missing
+  either would leave the dashboard and the transactions table disagreeing
+  about the same ledger.
+
+  **The extension is no longer a dead end.** It reports all three interstitial
+  outcomes to `POST /api/guard/events`; the dashboard renders a Budget Guard
+  card; `list_guard_events` lets the agent answer "what did Budget Guard
+  stop?". The URL and cart contents are deliberately not sent — the server has
+  no need for them and the extension already holds them locally.
+
+  Verified: `pytest` exit 0 (326 existing plus new money/staging tests),
+  Playwright **36/36**, `npm run build` clean, CI green on the push. Against
+  real seed data: a goal created at exactly ₹50,00,000; the duplicate
+  BIGBASKET charge found via `detect_anomalies` → `get_anomaly_transactions`
+  → staged delete; apply removed it (936 → 935) from both the engine and the
+  transactions table; restore returned it. Validation rejects a bad unit, an
+  unknown action kind and an invented transaction id.
+
+  **Not verified:** the live model actually choosing the right tools for the
+  headline sentence. Every deterministic layer beneath it is tested; that one
+  call was skipped to preserve Groq quota for the recording, and it is the
+  single thing to try by hand before the video (USER.md §3).
+
+  Also found and fixed in passing: `services/api/.env` pinned
+  `GROQ_MODEL_CHAT=llama-3.3-70b-versatile`, which this Groq account 404s on —
+  the exact failure recorded further down this file. Local chat was broken;
+  production was checked and is fine.
 
 - **T13 Budget Guard extension and T14 n8n workflows, both built.** Neither
   was blocking — Docker still isn't running locally, so T14's own build
@@ -764,3 +834,142 @@ orchestrator fail-fast rule; everything since has been implemented directly.
   `MIN_SPIKE_RELATIVE_CHANGE = 0.30` and `PRICE_HIKE_MIN_CONFIDENCE = 0.7` were
   chosen to fit this seed dataset. They are reasonable and documented, but they
   are tuned against synthetic data, not validated against real statements.
+
+---
+
+# Reference
+
+Moved here from USER.md on 20 Sep 2026, so that file holds only work that is
+still outstanding. Everything below is **already done** — it is here for when
+something breaks.
+
+## Where it lives
+
+| | |
+|---|---|
+| **Frontend** | https://finpilot-swart.vercel.app |
+| **API** | https://finpilot-w4ki.onrender.com/health |
+| **Repo** | https://github.com/VihaanR/finpilot (public) |
+| **Keep-alive** | cron-job.org pings `/health` every 10 min |
+
+## Environment files
+
+**Never commit either.** `.env.example` (committed) mirrors them, empty.
+
+`apps/web/.env.local`
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:8001        # Render URL in production
+NEXT_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+```
+
+`services/api/.env`
+```bash
+GROQ_API_KEY=gsk_...            # chat, monthly summary, the agentic panel
+GROQ_MODEL_CHAT=openai/gpt-oss-20b     # see the model-404 note below
+GEMINI_API_KEY=AIza...          # tier-2 categorisation, PDF fallback, embeddings
+SUPABASE_URL=...                # schema applied; the app still reads SQLite
+SUPABASE_SERVICE_KEY=...        # service_role — server only, never NEXT_PUBLIC_*
+DATABASE_URL=postgresql://...
+ALLOWED_ORIGINS=http://localhost:3000
+TELEGRAM_BOT_TOKEN=             # USER.md §2a
+INTERNAL_API_TOKEN=             # python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+> The `service_role` key bypasses row-level security. FastAPI environment
+> only — never in `apps/web`, never in a `NEXT_PUBLIC_*` variable, never in
+> the extension.
+
+## Deployment facts
+
+### Render — the Python version is what breaks a rebuild
+
+`render.yaml` sets `PYTHON_VERSION`, but **that file only applies to Blueprint
+deploys**. This service was created by hand in the dashboard, so it never
+reads it and Render falls back to its default — 3.14 as of 20 Sep 2026, which
+has no `psycopg-binary` wheels and no sdist. The error names psycopg; the real
+cause is the interpreter, visible only as `cp314` in the wheel filenames.
+
+`services/api/.python-version` pins **3.11.13** and is read either way. If
+Render rejects that exact patch release, set `PYTHON_VERSION=3.11` in the
+dashboard. Do **not** "fix" this by unpinning psycopg — the pins are
+consistent with 3.11, and chasing them onto a newer interpreter one at a time
+is a much longer afternoon.
+
+Settings: root directory `services/api`, build `pip install -r
+requirements.txt`, start `uvicorn app.main:app --host 0.0.0.0 --port $PORT`,
+free instance.
+
+### Vercel
+
+Root directory `apps/web` — which matters twice, because Vercel also reads
+`vercel.json` from there. At the repo root it is silently ignored and the
+security headers never apply.
+
+`NEXT_PUBLIC_*` is baked in at **build** time. Changing `NEXT_PUBLIC_API_URL`
+needs a **redeploy**, not a restart.
+
+### The CORS trap
+
+`ALLOWED_ORIGINS` must contain the Vercel URL **with no trailing slash** — a
+browser's `Origin` header never has one and the match is exact. A mismatch
+gives 200s from curl with no CORS header, which a browser treats as a hard
+failure with nothing to grep for server-side. The code now strips trailing
+slashes defensively and `test_config.py` pins it.
+
+Deployment is inherently two-pass: Render needs the Vercel URL in
+`ALLOWED_ORIGINS`, Vercel needs the Render URL in `NEXT_PUBLIC_API_URL`.
+Deploy Render → copy its URL into Vercel → deploy Vercel → set
+`ALLOWED_ORIGINS` on Render. The last step is the one everyone forgets.
+
+### No authentication — deliberate
+
+No login page, no session. The public URL opens straight onto a populated
+dashboard. Building auth on the last day would have risked a working product
+for a login screen standing between a judge and the thing being judged.
+
+- **The API is open.** Anyone with the Render URL can read the demo ledger and
+  spend the Groq/Gemini quota. **Reset demo data** fixes any mess.
+- **The store is SQLite on an ephemeral disk.** A cold start re-seeds it, so
+  the demo is always clean. Agent-made changes (a created goal, a removed
+  duplicate) survive a *restart with the disk intact* — startup only seeds
+  when `transaction_count() == 0` — but not a true cold start. That needs the
+  deferred Supabase swap; the keep-alive ping is what prevents cold starts
+  during judging.
+
+## Model quotas
+
+**Groq** runs chat, the monthly summary and the agentic panel. Rate-limited
+per minute, no hard daily wall — which is why chat moved off Gemini.
+
+**Two model ids 404 on this account** despite being listed as live on Groq's
+own docs: `llama-3.3-70b-versatile` and `llama-3.1-8b-instant`. Read as an
+account-tier restriction. `openai/gpt-oss-20b` is what works, and it is the
+code default in `app/config.py` — so if chat breaks, check whether a stale
+`GROQ_MODEL_CHAT` is overriding it in `.env` or the Render dashboard.
+
+**Gemini** does tier-2 categorisation, the PDF fallback and embeddings. Free
+tier is **5/min and 20/day, per model, per Cloud project**; Gemini *Pro*
+models are **0/day** without billing. Classifying the whole seed dataset is
+~19 calls, cached by narration hash, so this no longer bounds the demo.
+
+> A consumer Google AI Plus/Pro/Ultra subscription does **not** raise API rate
+> limits — those cover the Gemini app, not the API. Only project billing does.
+
+## Things that will go wrong
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Judge sees a 40-second load | Render cold start | Confirm the keep-alive ping is still running |
+| Judge sees a login screen | A Vercel **preview** URL was submitted | Use the production URL |
+| Dashboard loads but is empty | CORS — Vercel URL missing or trailing-slashed in `ALLOWED_ORIGINS` | See the CORS trap above |
+| Video link won't open | Drive sharing left on "Restricted" | Verify in incognito |
+| Chat/panel says the model failed | A stale `GROQ_MODEL_CHAT` pointing at a 404 model | Unset it; the code default works |
+| Chat says "Groq free-tier quota" | Groq's per-minute limit | Wait for the window to clear |
+| Gemini 429 during upload | Tier-2's **daily** cap for that model | Switch `GEMINI_MODEL_CLASSIFY`; each model has its own bucket |
+| Extension shows the wrong amount | A page element read as the cart total | Capture the cart URL and the figure shown |
+| Extension does nothing | Budget not fetched yet, or the cart is under budget | Open the popup and hit Refresh |
+| Agent stages nothing | Advice guardrail, or the model didn't pick a `propose_*` tool | Rephrase as an instruction, not a question |
+| n8n workflows silently no-op | Credential names don't match exactly | USER.md §2b steps 2–3 |
+| Render rebuild dies on psycopg | Python 3.14 | Pin the interpreter, above |
+| Money figures slightly off | A float crept into a currency path | `grep` for float in the engine; paise are ints |

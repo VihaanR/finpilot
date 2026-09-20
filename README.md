@@ -20,6 +20,12 @@ detection, anomaly statistics, cash-flow, budgets, goals, simulation. The agent 
 tools and writes prose; it never does arithmetic. A hallucinated figure has no citation,
 and the UI renders it as unverified.
 
+This holds even when the agent *changes* things. The dashboard's agentic panel takes a
+sentence like *"set up a goal for a car at 50L, and remove this duplicated charge"* and
+works out the steps itself — but it only ever **stages** them as cards you approve.
+Deterministic code does the writing, and even `"50L"` → paise is converted in Python,
+never by the model. See DESIGN.md §9.7.
+
 **2. Money is `BIGINT` paise everywhere.**
 No floats touch a currency value at any point. Formatting to `₹1,234.56` happens exactly
 once, at the render boundary. Floating-point rupees is the most common source of silent
@@ -53,7 +59,7 @@ See [`/accessibility`](apps/web/app/accessibility) and DESIGN.md §11.
 
 ```
 apps/web/            Next.js 15 · App Router · TypeScript · Tailwind · Recharts
-apps/extension/      MV3 "Budget Guard" browser extension            [P1]
+extension/           MV3 "Budget Guard" browser extension            [P1]
 services/api/        FastAPI
   app/ingest/          parsers, adapters, dedupe
   app/enrich/          3-tier categorisation
@@ -73,17 +79,23 @@ n8n/                 Telegram workflows                              [P1]
 |---|---|
 | [DESIGN.md](DESIGN.md) | Single source of architectural truth |
 | [BUILD_TASKS.md](BUILD_TASKS.md) | Task list with acceptance criteria |
-| [USER.md](USER.md) | Every step that needs a human |
+| [USER.md](USER.md) | What is still left for a human to do |
+| [PROGRESS.md](PROGRESS.md) | Build ledger, what is measured vs unverified, and the deployment/environment reference |
 | [SUBMISSION.md](SUBMISSION.md) | Video script, form answers, judge test-script |
 
 ---
 
 ## Running locally
 
-Prerequisites: Node 20+, Python 3.11, a Supabase project, and a free Gemini API
-key from Google AI Studio.
-Full setup instructions, including how to obtain each credential, are in
-[USER.md](USER.md).
+Prerequisites: Node 20+, Python 3.11, and free API keys from Groq (chat and the
+agentic panel) and Google AI Studio (categorisation, embeddings). A Supabase
+project is optional — the API runs against a self-seeding local SQLite store.
+The environment reference is in [PROGRESS.md](PROGRESS.md).
+
+> Port **8000 cannot bind** on some Windows machines — it falls inside the
+> reserved port exclusion range and fails with a misleading "socket access
+> forbidden". Use 8001, and build the web app with a matching
+> `NEXT_PUBLIC_API_URL`, since Next bakes it in at build time.
 
 ### API
 
@@ -92,7 +104,7 @@ cd services/api
 python -m venv .venv && .venv/Scripts/activate      # Windows
 pip install -r requirements.txt
 cp .env.example .env                                 # then fill it in
-uvicorn app.main:app --reload                        # http://localhost:8000
+uvicorn app.main:app --reload --port 8001            # http://localhost:8001
 ```
 
 `GET /health` returns `{"status":"ok"}`.

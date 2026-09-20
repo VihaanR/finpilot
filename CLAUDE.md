@@ -49,7 +49,7 @@ writes prose around figures the engine produced.
   simulate. Pure functions over frozen dataclasses. No DB, no LLM, no network.
 - `services/api/app/models/` — SQLAlchemy tables + Pydantic wire schemas.
   Deliberately *not* imported by the engine.
-- `services/api/app/{ingest,enrich,agent,privacy}/` — scaffolded, not yet built.
+- `services/api/app/{ingest,enrich,agent,privacy}/` — built.
 - `apps/web/` — Next.js 15 App Router, Tailwind v4, Recharts.
 - Runtime inference is split across two free tiers, never Anthropic:
   **Groq** (`openai/gpt-oss-20b`) for chat and the monthly summary —
@@ -72,7 +72,40 @@ a human (API keys, deploys, video) is in `USER.md`.
 Read `PROGRESS.md` before assuming anything about what currently works — this
 file describes structure, not the day's state.
 
+## The agentic layer, in one paragraph
+
+The agent has two modes. `POST /api/agent/ask` is read-only (12 tools) and is
+what `/chat` and the eval goldens use — **keep it behaviourally identical**.
+`POST /api/agent/act` additionally exposes `propose_*` tools that *stage*
+changes into an `ActionRegistry`; the UI renders them as cards and
+`POST /api/agent/actions/apply` is the only thing that writes. Staging tools
+are reachable only when `ToolContext.actions` is set, which is what keeps
+`/ask` incapable of mutating anything.
+
 ## Gotchas Claude keeps re-discovering
+
+- **The model must never convert a unit.** `"50L"` → paise is arithmetic, and
+  arithmetic is the engine's job. `propose_create_goal` takes
+  `amount_value=50, amount_unit="lakh"` and `app/agent/money.py` converts.
+  Same rule as every other figure, just less obvious.
+- **Never restate a staged action's amount in the prose.** It came from the
+  user, not a tool, so it has no citation — and `guardrails.audit_citations`
+  flags any uncited rupee figure. The action card carries the number as
+  structured data instead.
+- **Deleting a transaction is a side table, not a column.**
+  `deleted_transactions` mirrors the `dismissals`/`acknowledgements` pattern.
+  If you add a new read path over `transactions`, it must filter deleted ids —
+  both `transactions()` and `engine_txns()` do, and missing one makes the
+  dashboard and the transactions table disagree about the same ledger.
+- **`detect_anomalies` does not give the model transaction ids**, by design —
+  they live on the citation, server-side. `get_anomaly_transactions` is the
+  deliberate bridge for acting on a duplicate; don't "fix" this by widening
+  the anomaly payload.
+- **Two Groq model ids 404 on this account** despite Groq's docs listing them
+  as live: `llama-3.3-70b-versatile` and `llama-3.1-8b-instant`. Only
+  `openai/gpt-oss-20b` works. It is the default in `config.py`, so if chat
+  breaks, suspect a stale `GROQ_MODEL_CHAT` in `.env` or the Render dashboard
+  overriding it.
 
 - **Money is `int` paise everywhere.** Fields are named `*_paise`; `Txn`
   rejects a float amount at construction. Format to rupees only at the render

@@ -99,7 +99,7 @@ This constraint is also a *scoring asset*: it demonstrates problem understanding
                       └───────────┬──────────────────┘
                                   │ REST + SSE
 ┌─────────────────┐               │              ┌──────────────────────┐
-│ apps/extension  │───────────────┤              │  n8n (Docker, local) │
+│ extension/      │───────────────┤              │  n8n (Docker, local) │
 │ Budget Guard    │   signed      │              │  Telegram · schedules│
 │ MV3 content     │   budget      │              └──────────┬───────────┘
 │ script          │   snapshot    │                         │ webhook
@@ -617,6 +617,56 @@ Runs on `openai/gpt-oss-20b` via Groq (see the 9.1 correction note) with all eng
 - **Action items**: 3–5 concrete, non-advisory items — *"Two music subscriptions are active (₹298/mo combined). Review whether both are needed."* Never *"Cancel Spotify."*
 
 Rendered in the UI, sent via Telegram, and available as a Bhashini-translated version (§10.7).
+
+### 9.7 Agentic actions — stage, then confirm
+
+> **Added 20 Sep 2026 (BUILD_TASKS.md T17).** §9 as originally written gave the
+> agent eleven read-only tools. It could explain the ledger but not change it,
+> and goals had no creation path at all — the product demonstrated retrieval
+> rather than agency.
+
+The dashboard carries an agentic panel; `/chat` stays read-only. A single
+sentence — *"set up a goal of getting a car of 50L, and remove this
+transaction, it looks duplicated"* — is decomposed by the agent itself.
+
+**The model never mutates.** It calls `propose_*` tools that stage actions
+into an `ActionRegistry`, which mirrors the `CitationRegistry` of §9.3: same
+per-request lifetime, same short ids (`a1`, `a2`), same split between a
+model-facing stub and the full record the UI receives. Staged actions ride out
+on the `done` SSE event; the browser renders them as cards; `POST
+/api/agent/actions/apply` is the only writer, and it re-validates every
+parameter from scratch rather than trusting what the client echoes back.
+
+That ordering is what lets §9's central claim survive a feature that writes to
+the ledger: **the model selects, deterministic Python computes and mutates.**
+
+Three constraints fall directly out of it:
+
+1. **Unit conversion is arithmetic, so the model may not do it.** `"50L"` →
+   paise is a computation. `propose_create_goal` takes the tokens the user
+   said (`amount_value=50, amount_unit="lakh"`) and `app/agent/money.py`
+   converts. A hundred-fold error here is the one mistake in this feature a
+   user would act on.
+2. **Action figures stay out of the prose.** A user-supplied amount has no
+   citation to attach, so restating it in the answer would trip §9.3's
+   uncited-figure audit. The prompt directs the model to describe the action
+   and let the card carry the number as structured data.
+3. **Anomalies had to gain an id bridge.** `detect_anomalies` reports only a
+   count — the duplicate-charge `txn_ids` live on the citation, deliberately
+   invisible to the model — so acting on "this looks duplicated" was
+   impossible. `get_anomaly_transactions` returns rows with ids for one
+   anomaly, without widening the citation privacy boundary.
+
+**Mode separation.** Staging lives behind `POST /api/agent/act`, not a flag on
+`/api/agent/ask`, and the staging tools are reachable only when the tool
+context carries an `ActionRegistry`. So the read-only chat surface cannot
+propose a change, and the §9.5 eval goldens keep their exact behaviour.
+
+**Deletion is reversible.** A removed transaction goes into a
+`deleted_transactions` side table — the same shape as the existing
+acknowledgement and dismissal tables — filtered out of both the store's
+`transactions()` and `engine_txns()`. Ingested rows stay byte-identical to
+what arrived, and an undo is one row deleted.
 
 ---
 
