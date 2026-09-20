@@ -1,8 +1,10 @@
-"""The single seam between FinPilot and Google Gemini.
+"""The single seam between FinPilot and the chat/summary model (Groq).
 
-Every outbound call goes through here, because redaction and disclosure are
-not optional (DESIGN.md 12.1) and a second code path that talks to the model
-directly is a second code path that can forget them.
+Every outbound chat or summary call goes through here, because redaction and
+disclosure are not optional (DESIGN.md 12.1) and a second code path that talks
+to the model directly is a second code path that can forget them. Bulk
+categorisation and the PDF LLM-fallback adapter still call Google Gemini
+directly (they have their own key and quota, untouched by this seam).
 
 Three guarantees this module exists to make:
 
@@ -24,9 +26,8 @@ from typing import Any, Iterable, Sequence
 from ..config import settings
 from ..privacy.redact import RedactionMap, contains_long_digit_run, redact, restore
 
-#: Free-tier quota is per Cloud project and is not raised by a consumer
-#: Google AI Plus plan (DESIGN.md 9.1). Six iterations is the section 9.2
-#: ceiling; it also bounds the worst-case call count per question.
+#: Six iterations is the DESIGN.md 9.2 ceiling; it also bounds the worst-case
+#: call count per question.
 MAX_TOOL_ITERATIONS = 6
 
 
@@ -35,26 +36,26 @@ class LLMUnavailable(RuntimeError):
 
 
 def available() -> bool:
-    if not settings.gemini_api_key:
+    if not settings.groq_api_key:
         return False
     try:
-        import google.genai  # noqa: F401
+        import groq  # noqa: F401
     except ImportError:
         return False
     return True
 
 
 def client() -> Any:
-    if not settings.gemini_api_key:
+    if not settings.groq_api_key:
         raise LLMUnavailable(
-            "No GEMINI_API_KEY is configured. The deterministic engine still works; "
+            "No GROQ_API_KEY is configured. The deterministic engine still works; "
             "chat and narration need a key. See USER.md section 1."
         )
     try:
-        from google import genai
+        from groq import Groq
     except ImportError as exc:  # pragma: no cover - the dependency is pinned
-        raise LLMUnavailable("google-genai is not installed") from exc
-    return genai.Client(api_key=settings.gemini_api_key)
+        raise LLMUnavailable("groq is not installed") from exc
+    return Groq(api_key=settings.groq_api_key)
 
 
 @dataclass

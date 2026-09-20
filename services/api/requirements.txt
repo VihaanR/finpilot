@@ -22,7 +22,10 @@ psycopg[binary]==3.2.3
 supabase==2.11.0
 
 # --- AI ---
-# Google Gen AI SDK. Runtime inference is Gemini throughout (DESIGN.md 9.1).
+# Chat and the monthly summary run on Groq (switched 20 Sep 2026 off Gemini's
+# 20-requests/day free-tier wall). Gemini stays for bulk categorisation, the
+# PDF LLM-fallback adapter, and embeddings.
+groq==1.7.0
 google-genai==2.24.0
 
 # --- Runtime ---

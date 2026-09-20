@@ -25,10 +25,11 @@ ENGINE_DIR = pathlib.Path(__file__).resolve().parents[1] / "app" / "engine"
 
 #: DESIGN.md section 8: the engine is pure. These may never be imported.
 FORBIDDEN_ROOTS = {
-    # Runtime inference provider. `anthropic` stays listed so that if anyone
+    # Runtime inference providers. `anthropic` stays listed so that if anyone
     # reintroduces it the engine still refuses to depend on a model vendor.
     "google",
     "google_genai",
+    "groq",
     "anthropic",
     "supabase",
     "sqlalchemy",

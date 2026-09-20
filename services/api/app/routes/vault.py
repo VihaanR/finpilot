@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/vault", tags=["vault"])
 
 #: Modelled on the Account Aggregator artefact structure (DESIGN.md 10.2).
 #: Third parties must name who actually receives data — this is a user-facing
-#: privacy claim, so it says Google, not a generic "AI provider".
+#: privacy claim, so it names the real providers, not a generic "AI provider".
 CONSENT_ARTEFACT: dict[str, Any] = {
     "version": CONSENT_VERSION,
     "purpose": "Personal finance analysis and insight generation",
@@ -32,8 +32,13 @@ CONSENT_ARTEFACT: dict[str, Any] = {
     ],
     "third_parties": [
         {
+            "name": "Groq",
+            "role": "Chat and monthly summary — AI processing on redacted text",
+            "region": "Global",
+        },
+        {
             "name": "Google",
-            "role": "Gemini API — AI processing on redacted text",
+            "role": "Gemini API — bulk categorisation and embeddings on redacted text",
             "region": "Global",
         },
         {
@@ -73,7 +78,7 @@ def vault() -> dict[str, Any]:
                 "are kept, because they are the signal the model needs."
             ),
         },
-        "ai_configured": bool(settings.gemini_api_key),
+        "ai_configured": bool(settings.groq_api_key),
     }
 
 

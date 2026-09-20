@@ -1,11 +1,11 @@
-"""The Gemini function-calling loop (DESIGN.md 9.2).
+"""The Groq function-calling loop (DESIGN.md 9.2).
 
-Automatic function calling is deliberately **disabled**. The SDK will happily
-run the tool loop itself, but then the citations produced along the way are
-buried inside the SDK's transcript and the guardrails never see the final
-text. Driving the loop by hand costs about forty lines and buys the two things
-the architecture is built on: every citation is captured, and every answer is
-audited before it reaches the user.
+Driven by hand rather than through an SDK-managed agent loop, so citations
+produced along the way are captured and every answer is audited before it
+reaches the user — the two things the architecture is built on. Groq's chat
+completions API is OpenAI-compatible: tool calls arrive on
+`message.tool_calls`, and each tool's result goes back as its own
+`role="tool"` message keyed by `tool_call_id`.
 
 The loop emits events rather than returning a string, so the route can stream
 progress over SSE and the caller can collect the whole thing when it wants a
@@ -14,6 +14,7 @@ single answer (the eval harness does).
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import time
@@ -55,16 +56,13 @@ class AgentAnswer:
     error: str | None = None
 
 
-#: Transient upstream conditions worth a second attempt. 503 is the free tier
+#: Transient upstream conditions worth a second attempt. 503 is the provider
 #: shedding load under a demand spike, and not retrying it means a judge's
 #: first question fails for reasons unrelated to the product.
 #:
-#: **429 is deliberately absent.** The free tier's binding limit is
-#: GenerateRequestsPerDayPerProjectPerModel: 20 requests per *day* for
-#: gemini-3.8-flash, measured 20 Sep 2026 -- not the per-minute limit the docs
-#: describe. A 429 therefore usually means the day's budget is gone, and each
-#: retry spends another request of the twenty to be told so again. Retrying a
-#: quota error makes the shortage worse and can never fix it.
+#: **429 is deliberately absent.** Groq's binding limit resets on a rolling
+#: per-minute/per-day window, but a retry still spends a request to be told
+#: the same thing, and the response already carries a usable `retry-after`.
 _RETRY_STATUSES = (500, 502, 503, 504)
 _RETRY_DELAYS = (1.0, 3.0, 7.0)
 
@@ -83,13 +81,13 @@ def _generate_with_retry(client: Any, **kwargs: Any) -> Any:
     last: Exception | None = None
     for attempt, delay in enumerate((*_RETRY_DELAYS, None)):
         try:
-            return client.models.generate_content(**kwargs)
+            return client.chat.completions.create(**kwargs)
         except Exception as exc:
             last = exc
             if delay is None or _status_of(exc) not in _RETRY_STATUSES:
                 raise
             logger.warning(
-                "gemini call failed (%s), retrying in %.0fs (attempt %d)",
+                "groq call failed (%s), retrying in %.0fs (attempt %d)",
                 _status_of(exc), delay, attempt + 1,
             )
             time.sleep(delay)
@@ -98,33 +96,36 @@ def _generate_with_retry(client: Any, **kwargs: Any) -> Any:
 
 def _friendly_error(exc: Exception) -> str:
     """What to show the user. The detail goes to the log, not the browser."""
-    logger.exception("gemini call failed")
+    logger.exception("groq call failed")
     status = _status_of(exc)
     if status == 429:
-        retry_after = re.search(r"retry in ([\d.]+)s", str(exc))
+        retry_after = re.search(r"retry.{0,20}?([\d.]+)s", str(exc), re.IGNORECASE)
         when = f" Try again in about {float(retry_after.group(1)):.0f}s." if retry_after else ""
         return (
-            "I've used up the Gemini free-tier quota for now." + when + " "
+            "I've used up the Groq free-tier quota for now." + when + " "
             "The dashboard, radar, goals and simulator are computed locally and still work."
         )
     if status in _RETRY_STATUSES:
         return (
-            "Gemini is temporarily unavailable upstream. This usually clears in a "
+            "Groq is temporarily unavailable upstream. This usually clears in a "
             "moment — the dashboard and radar are computed locally and still work."
         )
     return "The model call failed. The dashboard and radar are computed locally and still work."
 
 
-def _decl_to_sdk(types_mod: Any) -> Any:
-    """Our plain-dict declarations as SDK function declarations."""
-    return types_mod.Tool(
-        function_declarations=[
-            types_mod.FunctionDeclaration(
-                name=d["name"], description=d["description"], parameters=d["parameters"]
-            )
-            for d in TOOL_DECLARATIONS
-        ]
-    )
+def _decl_to_sdk(declarations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Our plain-dict declarations as OpenAI-shaped tool definitions."""
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": d["name"],
+                "description": d["description"],
+                "parameters": d["parameters"],
+            },
+        }
+        for d in declarations
+    ]
 
 
 def run(
@@ -163,7 +164,7 @@ def run(
 
     if not llm.available():
         answer.error = (
-            "Chat needs a Gemini API key, which isn't configured. "
+            "Chat needs a Groq API key, which isn't configured. "
             "Everything else — the dashboard, radar, goals and simulator — is "
             "computed by the engine and works without it."
         )
@@ -171,10 +172,8 @@ def run(
         yield {"type": "done", "citations": [], "tools_used": [], "error": answer.error}
         return
 
-    from google.genai import types as gt
-
     client = llm.client()
-    model = settings.gemini_model_chat
+    model = settings.groq_model_chat
 
     # The question is user-authored and may carry PII; document text is
     # untrusted and is fenced before it is ever concatenated.
@@ -185,40 +184,56 @@ def run(
     if document_text:
         prompt_text = f"{prompt_text}\n\n{guardrails.wrap_untrusted(document_text)}"
 
-    contents: list[Any] = [gt.Content(role="user", parts=[gt.Part(text=prompt_text)])]
-    config = gt.GenerateContentConfig(
-        system_instruction=SYSTEM_PROMPT,
-        tools=[_decl_to_sdk(gt)],
-        automatic_function_calling=gt.AutomaticFunctionCallingConfig(disable=True),
-    )
+    messages: list[dict[str, Any]] = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": prompt_text},
+    ]
+    tools = _decl_to_sdk(TOOL_DECLARATIONS)
 
     final_text = ""
     for _ in range(max_iterations):
         try:
-            response = _generate_with_retry(client, model=model, contents=contents, config=config)
+            response = _generate_with_retry(
+                client, model=model, messages=messages, tools=tools, tool_choice="auto"
+            )
         except Exception as exc:  # the SDK raises a family of transport errors
             answer.error = _friendly_error(exc)
             yield {"type": "error", "message": answer.error}
             break
 
-        candidate = (response.candidates or [None])[0]
-        parts = list(getattr(getattr(candidate, "content", None), "parts", None) or [])
-        calls = [p.function_call for p in parts if getattr(p, "function_call", None)]
+        message = response.choices[0].message
+        calls = list(message.tool_calls or [])
 
         if not calls:
-            final_text = "".join(p.text for p in parts if getattr(p, "text", None))
+            final_text = message.content or ""
             break
 
-        contents.append(gt.Content(role="model", parts=parts))
-        replies = []
+        messages.append(
+            {
+                "role": "assistant",
+                "content": message.content,
+                "tool_calls": [
+                    {
+                        "id": call.id,
+                        "type": "function",
+                        "function": {"name": call.function.name, "arguments": call.function.arguments},
+                    }
+                    for call in calls
+                ],
+            }
+        )
         for call in calls:
-            name = call.name
-            args = dict(call.args or {})
+            name = call.function.name
+            try:
+                args = json.loads(call.function.arguments or "{}")
+            except json.JSONDecodeError:
+                args = {}
             answer.tools_used.append(name)
             yield {"type": "tool", "name": name, "label": TOOL_LABELS.get(name, name)}
             result = dispatch(name, args, ctx)
-            replies.append(gt.Part.from_function_response(name=name, response=result))
-        contents.append(gt.Content(role="user", parts=replies))
+            messages.append(
+                {"role": "tool", "tool_call_id": call.id, "content": json.dumps(result)}
+            )
     else:
         # Six iterations without settling means the model is thrashing. Say so
         # rather than presenting a partial answer as a complete one.

@@ -205,7 +205,7 @@ def test_disclosure_row_carries_no_values() -> None:
 
     store = FakeStore()
     payload = llm.prepare(["PAN ABCDE1234F and 9876543210"])
-    llm.disclose(store, purpose="chat", model="gemini-3.8-flash", payload=payload)
+    llm.disclose(store, purpose="chat", model="llama-3.3-70b-versatile", payload=payload)
 
     (row,) = store.rows
     blob = repr(row)
@@ -217,7 +217,7 @@ def test_disclosure_row_carries_no_values() -> None:
 
 def test_no_key_means_unavailable_not_a_crash(monkeypatch: pytest.MonkeyPatch) -> None:
     """The deterministic product must survive a missing key."""
-    monkeypatch.setattr(llm.settings, "gemini_api_key", "")
+    monkeypatch.setattr(llm.settings, "groq_api_key", "")
     assert llm.available() is False
     with pytest.raises(llm.LLMUnavailable):
         llm.client()

@@ -11,14 +11,14 @@ about two seconds.
 *cited* must equal the engine's. This is what proves the citation architecture
 end to end, and it is what needs the model.
 
-The split exists because the Gemini free tier allows roughly eight questions a
-day per model id (see CLAUDE.md), and 25 questions at 2–3 calls each does not
-fit. Marking the live subset is honest about that rather than shipping a suite
-that cannot pass.
+The split exists because chat runs on Groq's free tier (see CLAUDE.md), which
+is rate-limited per minute rather than gated by a hard daily cap — 25 questions
+back to back still needs pacing. Marking the live subset is honest about that
+rather than shipping a suite that cannot pass unattended.
 
     pytest evals/                 # offline only
     pytest evals/ --live          # + the `live: true` subset
-    pytest evals/ --live-all      # + every case (needs billing)
+    pytest evals/ --live-all      # + every case (paced against Groq's rate limit)
 """
 
 from __future__ import annotations
@@ -167,7 +167,7 @@ def test_agent_cites_the_engines_figure(
 
     answer = loop.ask(case["question"], snapshot)
     if answer.error and "quota" in answer.error.lower():
-        pytest.skip(f"Gemini quota exhausted: {answer.error}")
+        pytest.skip(f"model quota exhausted: {answer.error}")
     assert not answer.error, answer.error
 
     if case.get("expect_decline"):

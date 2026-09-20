@@ -10,7 +10,8 @@ Everything in this file requires a human. The coding agents cannot create accoun
 
 | # | Action | Blocks | Time | Do before |
 |---|---|---|---|---|
-| 1 | Gemini API key (free) | T05, T07 — everything AI | 3 min | **Hour 0** |
+| 1 | Groq API key (free) | T07 — chat and monthly summary | 2 min | **Hour 0** |
+| 1b | Gemini API key (free) | T05 — bulk categorisation, embeddings, PDF fallback | 3 min | **Hour 0** |
 | 2 | Supabase project | T02 — everything | 10 min | **Hour 0** |
 | 3 | GitHub repo | commits | 2 min | **Hour 0** |
 | 4 | Telegram bot token | T14 | 3 min | Hour 13 |
@@ -23,7 +24,28 @@ Items 1–3 are hard blockers. Do them before you start anything else. Items 4�
 
 ---
 
-## 1. Gemini API key — Hour 0
+## 1. Groq API key — Hour 0
+
+Chat and the monthly summary run on Groq, switched 20 Sep 2026 after the
+Gemini free tier's 20-requests/day cap ran out mid-demo-prep. Gemini's daily
+cap is per Cloud project and a consumer Google AI plan does not raise it (see
+§1b below) — Groq's free tier is rate-limited per minute instead, which is
+what actually fixes the problem you'll hit if you only have a Gemini key.
+
+1. Go to `console.groq.com/keys` → sign in → **Create API Key** → copy it
+2. No card required. The free tier covers this build.
+
+→ `GROQ_API_KEY=gsk_...`
+
+Set both `GROQ_API_KEY` locally in `services/api/.env` **and** on Render
+(Environment tab) if the API is already deployed — chat will keep returning
+"Chat needs a Groq API key" until both are set.
+
+## 1b. Gemini API key — Hour 0
+
+Still needed: bulk categorisation (T05 tier-2), the PDF LLM-fallback adapter,
+and embeddings all stay on Gemini — none of them share Groq's rate limits or
+this switch's motivation.
 
 1. Go to `aistudio.google.com/apikey` → sign in with your Google account
 2. **Create API key** → pick or create a Cloud project → copy it
@@ -51,24 +73,18 @@ That is fine — the build is designed for it:
 
 | Model | Free-tier limit | Usable? |
 |---|---|---|
-| `gemini-3.5-flash` | 5/min **and 20/day** | **yes — chat and summary run here** |
-| `gemini-3.5-flash-lite` | 5/min and 20/day | yes — bulk classification |
-| `gemini-3.8-flash` | 5/min and 20/day | yes, but no better than 3.5 |
+| `gemini-3.5-flash-lite` | 5/min and 20/day | yes — bulk classification, PDF fallback |
+| `gemini-3.5-flash` | 5/min and 20/day | yes, but nothing here calls it any more |
 | any Gemini **Pro** model | **0 per day** | no, needs billing |
 
 `gemini-2.5-pro` additionally returns 404, "no longer available to new users".
 
-**The daily cap is the one that will hurt you.** A chat question costs 2–3
-calls, so each model id is worth roughly **8 questions a day**. Each id is a
-separate bucket, so switching `GEMINI_MODEL_CHAT` in `services/api/.env` buys
-another 20 — but there is no free-tier configuration that survives a judge
-clicking around for ten minutes.
-
-**If you want the demo to be safe, enable billing** on the Cloud project
-(Tier 1). It is the difference between eight questions and a working product.
-Without it, record the video, and expect live judging to hit the wall.
-
-`gemini-2.5-pro` additionally returns 404, "no longer available to new users".
+**This no longer bounds the demo.** Chat and the monthly summary moved to
+Groq (§1) specifically because this table used to gate them — Gemini's role
+now is tier-2 categorisation (cached by narration hash, ~19 calls for the
+whole seed dataset — see above) and the PDF fallback, neither of which a
+judge triggers by asking questions. If tier-2 ever does hit the wall, the
+contingency below still applies to it.
 
 Check your own at `aistudio.google.com/rate-limit`.
 
@@ -124,6 +140,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000        # → Render URL at T12
 ### `services/api/.env`
 
 ```bash
+GROQ_API_KEY=gsk_...
 GEMINI_API_KEY=AIza...
 SUPABASE_URL=https://xxxxx.supabase.co
 SUPABASE_SERVICE_KEY=eyJ...                      # service_role — server only
@@ -316,7 +333,7 @@ judged. **Do not create the demo account** — there is nothing to log into.
 Two consequences to know about:
 
 - **The API is open.** Anyone with the Render URL can read the demo ledger,
-  spend your Gemini quota, and call `POST /api/vault/erase` with
+  spend your Groq/Gemini quota, and call `POST /api/vault/erase` with
   `{"confirm":"DELETE"}` to wipe it. The app self-heals: the free tier sleeps
   after 15 minutes, and startup re-seeds an empty store. The **Reset demo
   data** button fixes it immediately.
@@ -383,7 +400,7 @@ The form says: *"Remember to disable them after evaluation."*
 
 Once results are announced:
 1. Supabase → **Authentication → Users** → delete or disable `demo@finpilot.in`
-2. Rotate `GEMINI_API_KEY` at `aistudio.google.com/apikey` if the repo is public and anything leaked
+2. Rotate `GROQ_API_KEY` at `console.groq.com/keys` and `GEMINI_API_KEY` at `aistudio.google.com/apikey` if the repo is public and anything leaked
 3. Delete the cron-job.org keep-alive so Render stops burning free hours
 
 ---
@@ -418,8 +435,9 @@ The two moments where your attention is worth most: **hour 5–7** (engine corre
 | CORS errors after deploy | Vercel URL missing from `ALLOWED_ORIGINS` | §8d |
 | Auth redirect loop | Vercel URL missing from Supabase URL config | §8d |
 | Extension does nothing | Not logged into the web app in that browser | Log in; the app writes the snapshot |
-| Gemini 429s mid-build | Free-tier **daily** cap for that model, not a per-minute one | Switch the model id in `services/api/.env` (each model has its own daily bucket), or enable billing (§1) |
-| Expected Plus plan to lift API limits | Consumer subscriptions do not apply to the API | §1 — enable project billing for Tier 1, or stay on free |
+| Chat says "used up the Groq free-tier quota" | Groq's rate limit, not Gemini's | Wait for the window to clear, or switch `GROQ_MODEL_CHAT` |
+| Gemini 429s during ingest/upload | Tier-2 categorisation's **daily** cap for that model, not a per-minute one | Switch `GEMINI_MODEL_CLASSIFY` in `services/api/.env` (each model has its own daily bucket), or enable billing (§1b) |
+| Expected Plus plan to lift API limits | Consumer subscriptions do not apply to the API | §1b — enable project billing for Tier 1, or stay on free |
 | n8n workflows silently no-op | Credential names don't match exactly | §6, step 2–3 |
 | Money figures slightly off | A float crept into a currency path | `grep` for float in engine; paise are integers (DESIGN.md §5.1) |
 
@@ -427,7 +445,7 @@ The two moments where your attention is worth most: **hour 5–7** (engine corre
 
 ## 15. One-page checklist
 
-**Hour 0** — [ ] Gemini API key (free, no card) · [ ] Supabase project + vector + bucket · [ ] GitHub repo · [ ] LinkedIn post 1
+**Hour 0** — [ ] Groq API key (free, no card) · [ ] Gemini API key (free, no card) · [ ] Supabase project + vector + bucket · [ ] GitHub repo · [ ] LinkedIn post 1
 
 **Hour 12.5** — [ ] Migrations pushed · [ ] Render live, `/health` green · [ ] Vercel live · [ ] CORS + auth URLs · [ ] Demo seeded · [ ] Reset button works · [ ] Keep-alive running · [ ] **Verified in incognito**
 

@@ -1,6 +1,7 @@
 """Monthly summary generation (DESIGN.md 9.6).
 
-Runs on ``gemini-2.5-pro`` — it is asynchronous, so quality beats latency.
+Runs on Groq (`groq_model_summary`), same provider as chat — switched 20 Sep
+2026 off Gemini's 20-requests/day free-tier wall.
 
 The model receives **only pre-computed engine output**. It writes prose around
 figures it did not produce and cannot change, which is the same guarantee the
@@ -118,24 +119,24 @@ def generate(snapshot: Snapshot, *, month: date | None = None) -> Summary:
             month=facts["month"],
             text="",
             facts=facts,
-            error="Narration needs a Gemini API key. The figures below are the engine's.",
+            error="Narration needs a Groq API key. The figures below are the engine's.",
         )
 
-    model = settings.gemini_model_summary
+    model = settings.groq_model_summary
     body = json.dumps(facts, indent=2)
     payload = llm.prepare([body])
     llm.assert_clean(payload.texts)
     llm.disclose(snapshot.store, purpose="monthly_summary", model=model, payload=payload)
 
     try:
-        from google.genai import types as gt
-
-        response = llm.client().models.generate_content(
+        response = llm.client().chat.completions.create(
             model=model,
-            contents=[gt.Content(role="user", parts=[gt.Part(text=payload.texts[0])])],
-            config=gt.GenerateContentConfig(system_instruction=SUMMARY_PROMPT),
+            messages=[
+                {"role": "system", "content": SUMMARY_PROMPT},
+                {"role": "user", "content": payload.texts[0]},
+            ],
         )
-        text = (response.text or "").strip()
+        text = (response.choices[0].message.content or "").strip()
     except Exception as exc:
         return Summary(
             month=facts["month"],

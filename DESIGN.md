@@ -473,20 +473,28 @@ This is what powers both the What-If Simulator UI (§10.4) and the Budget Guard 
 
 ### 9.1 Model routing
 
-All runtime inference is **Google Gemini**, on the Gemini Developer API
-(AI Studio key). The routing below keeps one model per job rather than one
-model for everything, because the jobs have genuinely different shapes.
+Runtime inference splits across two providers, both free tier. The routing
+below keeps one model per job rather than one model for everything, because
+the jobs have genuinely different shapes.
 
 | Use | Model | Why |
 |---|---|---|
-| Interactive chat loop | `gemini-3.5-flash` | Function calling, and a daily quota that makes the free tier usable |
-| Monthly summary generation | `gemini-3.5-flash` | Runs async; the figures are pre-computed, so the model only writes prose |
-| Batch categorisation | `gemini-3.5-flash-lite` | High volume, narrow structured task |
-| Receipt/bill extraction | `gemini-3.5-flash-lite` (vision) | Structured extraction from images |
-| Document embeddings | `gemini-embedding-2` | 768-dim output for pgvector search |
+| Interactive chat loop | `llama-3.3-70b-versatile` (Groq) | Function calling, and a rate limit that isn't a hard daily wall |
+| Monthly summary generation | `llama-3.3-70b-versatile` (Groq) | Runs async; the figures are pre-computed, so the model only writes prose |
+| Batch categorisation | `gemini-3.5-flash-lite` (Gemini) | High volume, narrow structured task |
+| Receipt/bill extraction | `gemini-3.5-flash-lite` (vision, Gemini) | Structured extraction from images |
+| Document embeddings | `gemini-embedding-2` (Gemini) | 768-dim output for pgvector search |
 
-All are available on the Gemini API **free tier**, which is what the project
-runs on.
+> **Corrected 20 Sep 2026 (second pass).** Chat and the summary moved from
+> Gemini to Groq after the 20-requests/day Gemini free-tier cap (see the
+> correction note below) ran out mid-demo-prep, with no headroom left for
+> recording. Groq's free tier is rate-limited per minute rather than gated by
+> a hard daily wall, and `llama-3.3-70b-versatile` supports the same
+> function-calling shape `agent/loop.py` already drives by hand — exactly the
+> provider-agnostic swap the closing paragraph of this section anticipated.
+> Batch categorisation, the PDF LLM-fallback adapter, and embeddings stay on
+> Gemini: none of them share Groq's daily-cap problem, so there was nothing to
+> fix there.
 
 > **Corrected 20 Sep 2026, measured against a real key.** This table first
 > routed chat to `gemini-3.8-flash` and the summary to `gemini-2.5-pro`.
@@ -599,7 +607,7 @@ Three consequences, all of which are worth saying out loud in the demo:
 
 ### 9.6 Monthly summary generation
 
-Runs on `gemini-3.5-flash` (see the 9.1 correction note) with all engine outputs for the month pre-computed and supplied as structured input. Produces:
+Runs on `llama-3.3-70b-versatile` via Groq (see the 9.1 correction note) with all engine outputs for the month pre-computed and supplied as structured input. Produces:
 
 - **Headline**: income, expense, net, savings rate
 - **Top movements**: three largest category changes vs the previous month, with figures
