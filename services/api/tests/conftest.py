@@ -160,3 +160,76 @@ def goal_behind() -> Goal:
         priority=1,
         monthly_contribution_paise=rupees(10_000),
     )
+
+
+# --- Integration fixtures ---------------------------------------------------
+#
+# Everything above builds engine value types directly, because the engine is
+# pure. The tiers around it — ingestion, the store, the API — are not, and
+# their tests need a real (if temporary) database. These fixtures serve those
+# tests only; nothing in `test_recurrence`, `test_anomaly`, `test_cashflow`,
+# `test_budget`, `test_goals` or `test_simulate` touches them.
+
+
+@pytest.fixture(scope="session")
+def _demo_payload():
+    """Parse the seed statements once for the whole session."""
+    from app.store import demo
+
+    demo.ensure_generated()
+    return demo.OUTPUT_DIR
+
+
+@pytest.fixture
+def empty_store():
+    from app.store.db import Store
+
+    store = Store(":memory:")
+    yield store
+    store.close()
+
+
+@pytest.fixture
+def seeded_store(_demo_payload):
+    """A store holding the full 14-month demo ledger.
+
+    Loaded through the real ingestion pipeline rather than by direct insert,
+    so these tests also exercise the upload path.
+    """
+    from app.store import demo
+    from app.store.db import Store
+
+    store = Store(":memory:")
+    demo.load(store)
+    yield store
+    store.close()
+
+
+@pytest.fixture
+def api_client(tmp_path):
+    """TestClient against the real app, backed by a temporary database.
+
+    Configured through the same environment variable production uses rather
+    than by patching module globals, so the test exercises the real wiring.
+    """
+    import os
+
+    from fastapi.testclient import TestClient
+
+    from app import deps
+
+    previous = os.environ.get("FINPILOT_DB_PATH")
+    os.environ["FINPILOT_DB_PATH"] = str(tmp_path / "test.db")
+    deps.get_store.cache_clear()
+
+    from app.main import app
+
+    with TestClient(app) as client:  # startup seeds the demo ledger
+        yield client
+
+    deps.get_store().close()
+    deps.get_store.cache_clear()
+    if previous is None:
+        os.environ.pop("FINPILOT_DB_PATH", None)
+    else:
+        os.environ["FINPILOT_DB_PATH"] = previous

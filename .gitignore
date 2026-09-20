@@ -34,6 +34,11 @@ seed/output/
 *.pdf
 !docs/**/*.pdf
 uploads/
+# The offline SQLite store standing in for Supabase. Generated on first boot,
+# holds a real ledger, and must never be committed.
+*.db
+*.db-wal
+*.db-shm
 
 # ---- Editors / OS ----
 .DS_Store
