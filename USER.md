@@ -226,14 +226,13 @@ Then in Chrome:
 
 ## 8. Deployment — Hour 12.5 (T12)
 
-### 8a. Supabase migrations
+### 8a. Supabase migrations — **already done, 20 Sep 2026**
 
-```powershell
-npx supabase link --project-ref <your-project-ref>
-npx supabase db push
-```
+Applied over `DATABASE_URL` with psycopg: 14 tables, `categories` = 42 rows,
+RLS on and enforced, `pgvector` enabled. Nothing to do here.
 
-Verify in the Supabase Table Editor that all tables exist and `categories` has rows.
+Note the app does **not** read Supabase yet — the API still uses its offline
+SQLite store (§8e). The schema is ready for when it does.
 
 ### 8b. Render — FastAPI
 
@@ -253,27 +252,58 @@ Verify in the Supabase Table Editor that all tables exist and `categories` has r
 ### 8c. Vercel — Next.js
 
 1. `vercel.com` → **Add New → Project** → import the repo
-2. Root directory: `apps/web`
+2. Root directory: `apps/web` — this matters twice: Vercel also reads
+   `vercel.json` from here, which is why that file lives in `apps/web/` and
+   not at the repo root. At the root it would be silently ignored and the
+   security headers would never apply.
 3. Framework preset: Next.js (auto-detected)
-4. **Environment Variables** → the three from `.env.local`, with `NEXT_PUBLIC_API_URL` set to the Render URL
+4. **Environment Variables** → the three from `.env.local`, with
+   `NEXT_PUBLIC_API_URL` set to the Render URL
 5. Deploy
+
+> **`NEXT_PUBLIC_*` is baked in at build time, not read at runtime.** If you
+> change `NEXT_PUBLIC_API_URL` later you must **redeploy**, not just restart —
+> a restart keeps the old URL compiled into the bundle.
+
+> **Two-pass ordering.** Render needs `ALLOWED_ORIGINS` to contain the Vercel
+> URL, and Vercel needs `NEXT_PUBLIC_API_URL` to contain the Render URL, so
+> neither can be fully configured first. Deploy Render, copy its URL into
+> Vercel, deploy Vercel, then come back and set `ALLOWED_ORIGINS` on Render to
+> the Vercel URL. Skipping the last step gives you a site that loads and shows
+> nothing, with only a CORS error in the browser console to explain why.
 
 ### 8d. Close the loop
 
-- Add the Vercel URL to `ALLOWED_ORIGINS` on Render and redeploy
-- Supabase → **Authentication → URL Configuration** → add the Vercel URL to Site URL and Redirect URLs
+- Add the Vercel URL to `ALLOWED_ORIGINS` on Render and redeploy (see the
+  two-pass note in §8c — this is the step everyone forgets)
+- Confirm `https://<render>.onrender.com/health` → `{"status":"ok"}`
+- Open the Vercel URL in a fresh incognito window: the dashboard should be
+  populated with no login and no manual step
+- ~~Supabase → Authentication → URL Configuration~~ — not applicable, this
+  build has no auth (§8e)
 
-### 8e. Seed the demo account
+### 8e. The demo data — and the login that does not exist
 
-```powershell
-python seed\generate.py --seed 42 --user demo@finpilot.in --push-production
-```
+**There is no authentication in this build.** No login page, no Supabase auth
+wiring, no session. The public URL opens straight onto a populated dashboard.
 
-Then **verify in a fresh incognito window**: open the Vercel URL, log in as `demo@finpilot.in` / `FinPilot@2026`, confirm the dashboard is populated.
+That is a deliberate deviation from BUILD_TASKS.md T12, which asks for a
+`demo@finpilot.in` account. Building auth on the last day would risk a working
+product for a login screen that stands between a judge and the thing being
+judged. **Do not create the demo account** — there is nothing to log into.
 
-Incognito matters — your normal browser has a session and will hide a broken login.
+Two consequences to know about:
 
----
+- **The API is open.** Anyone with the Render URL can read the demo ledger,
+  spend your Gemini quota, and call `POST /api/vault/erase` with
+  `{"confirm":"DELETE"}` to wipe it. The app self-heals: the free tier sleeps
+  after 15 minutes, and startup re-seeds an empty store. The **Reset demo
+  data** button fixes it immediately.
+- **The store is SQLite on Render's ephemeral disk.** It is re-seeded on every
+  cold start, so the demo is always clean and never accumulates. Uploads a
+  judge makes do not survive a restart. For a demo this is a feature; it is
+  not production persistence, and the Supabase schema (already applied) is
+  where that would go.
 
 ## 9. Bhashini *(optional, hour 13+)*
 

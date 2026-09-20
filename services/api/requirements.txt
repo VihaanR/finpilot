@@ -32,3 +32,6 @@ python-dotenv==1.0.1
 # --- Tests ---
 pytest==8.3.4
 pytest-asyncio==0.25.2
+# The eval harness reads evals/golden.yaml. Undeclared, this fails only on a
+# fresh clone -- exactly where a judge or a CI runner meets it first.
+pyyaml==6.0.2
