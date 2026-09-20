@@ -7,10 +7,12 @@ then **T04 ingestion**, **T05 tier-1**, an **offline SQLite store** standing in
 for Supabase, the **full API route layer**, the **frontend** (T08, T09, T11),
 and finally **T07 the agent layer**, **T10 chat with citations** and **T15 the
 eval harness**, a **committed accessibility suite**, the **Supabase
-migrations**, and **T12 deploy prep**. The owner supplied a Gemini key and a
+migrations**, and **T12 deploy**. The owner supplied a Gemini key and a
 Supabase project mid-session, which turned several long-standing "unverified"
-claims into measured ones — and falsified two of them. Everything is committed
-and pushed to `origin/main`.
+claims into measured ones — and falsified two of them. **FinPilot is now live
+in production** at https://finpilot-swart.vercel.app, backed by
+https://finpilot-w4ki.onrender.com. Everything is committed and pushed to
+`origin/main`.
 
 Scope decided with the owner: Gemini is for **recording a demo video**, not
 live judging, so the free tier stands and billing was rejected. The Supabase
@@ -24,30 +26,46 @@ Every line was run and observed in this session, from the repo root.
 
 **Repository**
 
-- `git rev-list --count HEAD` → **19 commits**, HEAD `d08460b`.
-- Working tree is **clean**, and **pushed**: `1833ade..d08460b` to
-  `origin/main`, `git status -sb` shows no divergence. That matters because
-  Render and Vercel deploy *from GitHub* — before this push, nothing built in
-  this session was deployable.
-- Secret scan over the 88 outgoing files: no keys, no `.env`, no `*.db`, and
-  no Supabase project ref.
+- `git rev-list --count HEAD` → **23 commits**, HEAD `04a4161`.
+- Working tree is **clean**, and **pushed**: `git status -sb` shows no
+  divergence from `origin/main`. That matters because Render and Vercel
+  deploy *from GitHub* — nothing built in this session is live until pushed.
+- Secret scan over every outgoing commit's diff: no keys, no `.env`, no
+  `*.db`, and no Supabase project ref.
 
-**Production — the API is deployed and live**
+**Production — live end to end, both sides deployed and checked from outside**
 
 - `https://finpilot-w4ki.onrender.com/health` → `{"status":"ok"}`.
 - `/api/dashboard` on the deployed instance → `as_of 2026-09-19`, 3 accounts,
   leak score **22** — identical to local. **The SQLite store self-seeded on
   Render's blank ephemeral disk**, which is the mechanism the whole
   no-database deploy rests on, now proven in production rather than simulated.
-- `/api/radar`, `/api/goals`, `/api/vault`, `/api/transactions`,
-  `/api/banks/password-hints` → all **200**.
+- `/api/radar`, `/api/goals`, `/api/vault`, `/api/agent/suggestions` → all
+  **200**, checked with the real `Origin: https://finpilot-swart.vercel.app`
+  header and the CORS response header confirmed present on each, not just the
+  status code (a 200 with no CORS header still fails silently in a browser).
+- `https://finpilot-swart.vercel.app` loads **200** for an unauthenticated
+  request — no Vercel SSO wall. (A sibling *preview* URl,
+  `...-npsx2kd29-....vercel.app`, does 302 to `vercel.com/sso-api` for anyone
+  without a Vercel session; that one must never go on the submission form.)
 - `/api/agent/suggestions` → Gemini key present, AI consent granted, 4
-  questions. (Checked deliberately via the endpoint that reports readiness
-  *without* calling the model, to preserve quota for the video.)
-- **`ALLOWED_ORIGINS` is still the default `http://localhost:3000`.** A
-  preflight from a Vercel-style origin returns **400**. Until it is updated,
-  the deployed site will load and render nothing, with only a CORS error to
-  explain why. This is the §8d step, still outstanding.
+  questions. (Checked via the endpoint that reports readiness *without*
+  calling the model, to preserve quota for the video.)
+
+**The CORS trap, and why it took three passes to actually close**
+
+`ALLOWED_ORIGINS` started at the code default (`localhost:3000`) — reported
+here as the T12 blocker. The owner set it in the Render dashboard, but to a
+value with a **trailing slash**: `https://finpilot-swart.vercel.app/`. A
+browser's `Origin` header never carries one, so `CORSMiddleware`'s exact
+string match silently rejected every request — 200 from curl, no
+`access-control-allow-origin` header, which a browser treats as a hard
+failure with no server-side error to grep for. Fixed in code
+(`allowed_origins_list` now `.rstrip("/")`s every entry) and covered by
+`test_config.py`, so a future re-paste of the same kind of URL cannot
+reintroduce it. Verified live after the redeploy settled: preflight and GET
+both carry the header, all data routes return real data through the deployed
+frontend's actual origin.
 
 **The Render build failure, and what it actually was**
 
@@ -175,6 +193,23 @@ afterwards; the schema is empty of data.
   1 `price_hike`, 1 `new_large_merchant`).
 
 ## Completed recently
+
+- **T12 deploy is done — live in production, verified from outside.**
+  `https://finpilot-w4ki.onrender.com` (API) and
+  `https://finpilot-swart.vercel.app` (frontend). Fixed a real build failure
+  along the way: the first Render deploy died on `psycopg-binary`, which
+  looked like a bad pin but was actually Python 3.14 (Render's default,
+  since `render.yaml`'s `PYTHON_VERSION` only applies to Blueprint deploys, and
+  this service was created by hand). `services/api/.python-version` pins
+  3.11.13 and fixed it — confirmed by `cp311` wheels in the successful build
+  log. Then closed a CORS trap: `ALLOWED_ORIGINS` was set with a trailing
+  slash, which a browser's `Origin` header never has, so every request was
+  silently rejected with no error on either side. Fixed in code
+  (`.rstrip("/")` on every configured origin) with a regression test, not just
+  the dashboard value, so the same paste-in mistake can't recur. Also caught
+  and flagged: a sibling Vercel *preview* URL sits behind Vercel's SSO wall
+  and would show a login screen to any judge who clicked it — the production
+  URL above does not.
 
 - **T12 deploy prep** (`d08460b`). Verified before fixing: the API was booted
   with `.env` hidden and configuration supplied only through environment
@@ -404,16 +439,16 @@ afterwards; the schema is empty of data.
 - **Docker Desktop daemon not running**, so a local Postgres+pgvector container
   was not available as a fallback for the above. Starting Docker Desktop would
   unblock migration testing without needing Supabase.
-- **Gemini key supplied and working.** No longer a blocker for building — but
-  **free-tier quota is now the binding constraint on demoing.** ~20 requests
-  per day per model, and a chat question costs 2–3 calls, so one model id is
-  worth roughly 8 questions a day. Switching `GEMINI_MODEL_CHAT` buys another
-  bucket; nothing on the free tier survives a judge clicking around for ten
-  minutes. **Enabling billing (Tier 1) is the single highest-value remaining
-  action for the demo**, and it is also what would let the full 25-case eval
-  set run. See USER.md §1.
-- Later, in order: Telegram bot token (T14), Vercel + Render accounts (T12),
-  n8n via Docker (T14).
+- **Gemini key supplied and working.** Not a blocker — billing was
+  considered and rejected (see header): the key is for recording a demo
+  video, not live judging, so ~20 requests/day/model is enough. Pace
+  questions a few seconds apart while recording.
+- ~~Vercel + Render accounts (T12).~~ **Cleared 20 Sep 2026.** Both deployed,
+  live, verified. See Completed recently.
+- **cron-job.org keep-alive ping** — the one remaining owner-only step. Not
+  set up yet; Render's free tier sleeps after 15 idle minutes, so this should
+  happen before any live clicking, not just before a recording.
+- Later, if pursued: Telegram bot token (T14), n8n via Docker (T14).
 
 **Code blockers:** none. T04 and T05 tier-1 are done and were built entirely
 offline; the SQLite store substitutes for Supabase so the frontend has real
@@ -436,11 +471,10 @@ orchestrator fail-fast rule; everything since has been implemented directly.
   the store layer was designed for — the engine and views are unaffected
   because neither knows how rows are fetched — and it is a prerequisite for
   T12 deploying anything with real persistence.
-- **T12 deploy checkpoint** — everything that can be done without the owner's
-  accounts is done and pushed. What remains is owner-only: Render (USER.md
-  §8b) → copy its URL into Vercel (§8c) → deploy → set `ALLOWED_ORIGINS` on
-  Render (§8d) → cron-job.org keep-alive ping. Then the judge script can be
-  run against production.
+- ~~T12 deploy checkpoint.~~ **Done, live, and verified from outside** — see
+  Completed recently. What's left of T12 is a single owner-only step: the
+  cron-job.org keep-alive ping on `.../health`, so Render's free-tier sleep
+  doesn't cold-start a judge's first click. Not code; nothing to commit.
 - ~~Enable Gemini billing.~~ **Decided against, 20 Sep 2026.** The owner is
   using Gemini to record a demo video, not for live judging, so ~20 requests
   per day per model is sufficient and billing is unnecessary. The full 25-case
