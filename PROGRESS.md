@@ -6,9 +6,17 @@ Session: 19–20 Sep 2026 — built T01–T06 from a bare repo of planning docs,
 then **T04 ingestion**, **T05 tier-1**, an **offline SQLite store** standing in
 for Supabase, the **full API route layer**, the **frontend** (T08, T09, T11),
 and finally **T07 the agent layer**, **T10 chat with citations** and **T15 the
-eval harness**. The owner supplied a Gemini key and a Supabase project
-mid-session, which turned several long-standing "unverified" claims into
-measured ones — and falsified two of them. Everything is committed.
+eval harness**, a **committed accessibility suite**, the **Supabase
+migrations**, and **T12 deploy prep**. The owner supplied a Gemini key and a
+Supabase project mid-session, which turned several long-standing "unverified"
+claims into measured ones — and falsified two of them. Everything is committed
+and pushed to `origin/main`.
+
+Scope decided with the owner: Gemini is for **recording a demo video**, not
+live judging, so the free tier stands and billing was rejected. The Supabase
+**store swap was deliberately not attempted** — the schema is applied, but the
+API still reads SQLite, which self-seeds and is sufficient for a demo. Doing
+that refactor on the last day would risk a working product.
 
 ## Verified state
 
@@ -16,8 +24,13 @@ Every line was run and observed in this session, from the repo root.
 
 **Repository**
 
-- `git rev-list --count HEAD` → **13 commits**, HEAD `42a8649`.
-- Working tree is **clean**: `git status --short` is empty.
+- `git rev-list --count HEAD` → **19 commits**, HEAD `d08460b`.
+- Working tree is **clean**, and **pushed**: `1833ade..d08460b` to
+  `origin/main`, `git status -sb` shows no divergence. That matters because
+  Render and Vercel deploy *from GitHub* — before this push, nothing built in
+  this session was deployable.
+- Secret scan over the 88 outgoing files: no keys, no `.env`, no `*.db`, and
+  no Supabase project ref.
 
 **Tests and services**
 
@@ -134,6 +147,31 @@ afterwards; the schema is empty of data.
   1 `price_hike`, 1 `new_large_merchant`).
 
 ## Completed recently
+
+- **T12 deploy prep** (`d08460b`). Verified before fixing: the API was booted
+  with `.env` hidden and configuration supplied only through environment
+  variables, the way Render runs it. It came up, read `ALLOWED_ORIGINS` from
+  the environment, resolved the corrected model ids, and **self-seeded the
+  demo ledger on a blank disk** — a populated dashboard from an empty
+  database, no manual step. That was the main deploy risk.
+
+  Three real defects in the configs:
+  1. **`vercel.json` sat at the repo root, where Vercel would never read it.**
+     Root Directory is `apps/web`, and Vercel reads `vercel.json` from the
+     root directory — the file was inert and its security headers would have
+     silently never applied. Moved, and its `cd apps/web` prefixes dropped
+     since they would now resolve to `apps/web/apps/web`.
+  2. **`pyyaml` was undeclared**, so the eval suite passes locally and fails
+     on a fresh clone — where a judge or CI meets it first.
+  3. **USER.md promised a login that does not exist.** §8e now states plainly
+     that this build has no auth and tells the owner *not* to create the
+     `demo@finpilot.in` account T12 asks for.
+
+  Also corrected: §8a still instructed running migrations that are already
+  applied, and §8d configured Supabase auth redirects for auth that does not
+  exist. Added the two ordering traps that bite real deploys — `NEXT_PUBLIC_*`
+  is baked in at build time, and `ALLOWED_ORIGINS`/`NEXT_PUBLIC_API_URL` are
+  mutually dependent, making the deploy inherently two-pass.
 
 - **A committed accessibility suite** (`c679e7f`). `apps/web/tests/a11y.spec.ts`
   replaces the one-off script: 8 routes × 2 themes, skip-link, 200% zoom, the
@@ -370,10 +408,16 @@ orchestrator fail-fast rule; everything since has been implemented directly.
   the store layer was designed for — the engine and views are unaffected
   because neither knows how rows are fetched — and it is a prerequisite for
   T12 deploying anything with real persistence.
-- **T12** deploy checkpoint — **the most valuable remaining task.** Every P0
-  route it would deploy now exists and works, chat included.
-- **Enable Gemini billing (Tier 1)**, or accept ~8 chat questions per day in
-  front of judges. This also gates the full 25-case eval run (`--live-all`).
+- **T12 deploy checkpoint** — everything that can be done without the owner's
+  accounts is done and pushed. What remains is owner-only: Render (USER.md
+  §8b) → copy its URL into Vercel (§8c) → deploy → set `ALLOWED_ORIGINS` on
+  Render (§8d) → cron-job.org keep-alive ping. Then the judge script can be
+  run against production.
+- ~~Enable Gemini billing.~~ **Decided against, 20 Sep 2026.** The owner is
+  using Gemini to record a demo video, not for live judging, so ~20 requests
+  per day per model is sufficient and billing is unnecessary. The full 25-case
+  eval run (`--live-all`) therefore stays out of reach by choice, not by
+  accident; the 7-case live subset covers the acceptance criteria.
 - **T05 tier-2** — the batch classifier is written and has still never run.
   Tier 1 covers 97.2%, so it remains a refinement, not a dependency.
 - **T08 leftovers** — Supabase auth pages and an axe run wired into CI rather
