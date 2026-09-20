@@ -49,11 +49,25 @@ Cut in this order: the simulator beat (0:25) → the extension beat (0:17) → t
 
 ## 2. Submission form — field by field
 
+This matches the actual form fields exactly, in order.
+
+### Primary Team Member *(required)*
+
+| Field | Value |
+|---|---|
+| Full Name | `________________` — fill in |
+| Phone Number | `________________` — fill in |
+| Email Address | `________________` — fill in |
+
+### Team Member 2 *(optional)*
+
+Same three fields, if there's a second person on the team. Leave blank if solo — the form marks it optional.
+
 ### Team Name *(required)*
 `________________` — fill in.
 
 ### Video Demo Link *(required)*
-Google Drive link. **Sharing verified in an incognito window.**
+Google Drive link. **Sharing verified in an incognito window** (see §1's recording checklist — "Anyone with the link → Viewer", then reopen the link logged out to confirm).
 
 ### Agent Access Link
 
@@ -61,9 +75,11 @@ Google Drive link. **Sharing verified in an incognito window.**
 https://finpilot-swart.vercel.app
 ```
 
-Before pasting it: open it in a fresh **incognito** window and confirm the populated dashboard loads in under three seconds. If Render is cold, the keep-alive ping isn't running.
+Before pasting it: open it in a fresh **incognito** window and confirm the populated dashboard loads in under three seconds. If Render is cold, the keep-alive ping isn't running — give it ~40s and retry once, then check the ping job.
 
 > ⚠️ **Never paste a Vercel *preview* URL.** Preview deployments sit behind Vercel's SSO wall and show a Vercel login screen to anyone without a Vercel session — a judge would see a wall, not the product. Only the production URL above is public.
+
+The form says the evaluators will test 2–3 times — that's exactly why the dashboard's **Reset demo data** button matters: it means their runs don't interfere with each other, no login required to reset it.
 
 ### Agent Credentials
 
@@ -75,25 +91,35 @@ sample data. A "Reset demo data" button on the dashboard restores a
 clean state between test runs.
 ```
 
-**Say "none" explicitly rather than leaving the field blank** — a blank field reads as an oversight, and a judge who expects a login may go looking for one.
+**Say "none" explicitly rather than leaving the field blank** — a blank field reads as an oversight, and the form's own placeholder example (`admin` / `123456`) implies a login is expected by default. State plainly that this product doesn't have one and why (below), so it reads as a decision, not a gap.
 
-This build deliberately has no authentication (DESIGN.md, PROGRESS.md § reference): building auth on the last day would have risked a working product for a login screen standing between a judge and the thing being judged. The reset note matters too — the form says the team will test 2–3 times, and it tells them their runs won't interfere with each other.
+This build deliberately has no authentication (DESIGN.md, PROGRESS.md § reference): building auth on the last day would have risked a working product for a login screen standing between a judge and the thing being judged.
+
+> **After the results are announced**, this stops being a non-issue — see USER.md §5: rotate `GROQ_API_KEY`/`GEMINI_API_KEY`, kill the Render keep-alive, revoke the Telegram bot token. A public URL with no login means anyone who finds it can use it indefinitely, which is fine for a judged demo window and not fine forever.
 
 ### Additional Materials
 
+The form explicitly invites a `PITCH.md` here — this repo doesn't have one. If you want a short written pitch alongside the video (not required; the video already carries the pitch per §1's script), say so and I'll draft one before you paste this section in. Otherwise, everything below stands on its own:
+
 ```
-GitHub (full source, MIT): https://github.com/<you>/FinPilot
+GitHub (full source, MIT): https://github.com/VihaanR/finpilot
 
 DESIGN.md — complete architecture: deterministic analytics engine,
 tool-calling agent with mandatory citations, PII redaction before every
 LLM call, and the regulatory basis for each India-specific feature.
 
-n8n/finpilot-workflows.json — 4 workflows: Telegram ingestion and Q&A,
-daily brief, mandate alerts, monthly summary.
+n8n/finpilot-workflows.json — 3 workflows (daily brief, mandate alert,
+monthly summary), all push-only to Telegram on a schedule. Tested live
+against a real bot; n8n/workflows/*.json holds the individual per-workflow
+exports if you'd rather import them one at a time.
 
 extension/ — "Budget Guard", an MV3 Chrome extension that intercepts
 over-budget checkouts on Amazon and Flipkart. Load unpacked (install
 instructions in USER.md); not Web Store published within the hackathon window.
+
+The Data Vault's "Connect Gmail" panel — reads HDFC transaction-alert
+emails in as transactions on demand, no manual upload needed. Built after
+the core submission scope; optional to demo, not load-bearing.
 
 /accessibility — WCAG 2.1 AA conformance statement. Built to RPwD Act 2016
 and the Supreme Court's ruling in Pragya Prasun v. Union of India
