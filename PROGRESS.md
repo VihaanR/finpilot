@@ -2,14 +2,13 @@
 
 Repo: `V:\Projects\FinPilot` — https://github.com/VihaanR/finpilot (public)
 Design: `DESIGN.md` · Tasks: `BUILD_TASKS.md` · Human steps: `USER.md`
-Session: 19–20 Sep 2026 — built T01, T02 (authored, not applied), T03 and T06
-from a bare repo of planning docs; found and fixed three real defects in the
-recurrence/anomaly engine by running it against the generated seed data;
-switched the runtime LLM provider from Anthropic to Google Gemini (free tier);
-then built **T04 ingestion**, **T05 tier-1 categorisation**, an **offline
-SQLite store** standing in for the unprovisioned Supabase, and the **full API
-route layer** on top of it, then the **frontend** (T08, T09, T11). All of it
-is now committed; T10 chat is the one route still missing.
+Session: 19–20 Sep 2026 — built T01–T06 from a bare repo of planning docs,
+then **T04 ingestion**, **T05 tier-1**, an **offline SQLite store** standing in
+for Supabase, the **full API route layer**, the **frontend** (T08, T09, T11),
+and finally **T07 the agent layer**, **T10 chat with citations** and **T15 the
+eval harness**. The owner supplied a Gemini key and a Supabase project
+mid-session, which turned several long-standing "unverified" claims into
+measured ones — and falsified two of them. Everything is committed.
 
 ## Verified state
 
@@ -17,18 +16,15 @@ Every line was run and observed in this session, from the repo root.
 
 **Repository**
 
-- `git rev-list --count HEAD` → **7 commits**, HEAD `f2b90ec`.
-- Working tree is **clean**: `git status --short` is empty. The session's work
-  landed as `e2467cb` (T04+T05, store, routes) and `f2b90ec` (T08+T09+T11),
-  61 files and 9,016 insertions between them.
+- `git rev-list --count HEAD` → **13 commits**, HEAD `42a8649`.
+- Working tree is **clean**: `git status --short` is empty.
 
 **Tests and services**
 
-- `pytest services/api/tests/` → **245 passed** in 1.94s (200 engine/seed +
-  45 new ingestion tests). Zero failures, zero skips.
+- `pytest services/api/tests/ evals/` → **327 passed**, zero failures. 25 live
+  eval cases skip by default (they need model quota; see below).
+- `cd apps/web && npm run build` → 12/12 static pages, no type errors.
 - `GET /health` on a live uvicorn → `{"status":"ok"}`, HTTP 200.
-- `cd apps/web && npm run build` → "Compiled successfully", **8/8 static
-  pages**, no type errors, from a cleaned `.next`.
 - `import app.models` → **14** SQLAlchemy tables, **31** Pydantic schemas.
 
 **Frontend, checked in a real browser**
@@ -71,14 +67,28 @@ Playwright + Chromium.
   categories are now re-derived by the tier-1 rules rather than read from the
   generator's ground truth, which yields one extra category spike.
 
-**Gemini provider swap**
+**Gemini, now exercised against a real key (was entirely unverified)**
 
-- `import anthropic` → `ModuleNotFoundError`; the package is gone from the venv.
-- `import google.genai` → **2.24.0**.
-- `app.config` resolves `gemini-3.8-flash` (chat), `gemini-2.5-pro` (summary),
-  `gemini-3.5-flash-lite` (classify), `gemini-embedding-2` at **768 dims**.
-- `document_chunks.embedding` in the migration → `vector(768)`, matching
-  `settings.embedding_dimensions`.
+- A live `generate_content` call returns text; a live `embed_content` returns
+  **768 dims**, matching `document_chunks.embedding vector(768)`.
+- The agent answered *"Where did I spend the most last month?"* with
+  **"Shopping in September 2026, totaling ₹48,433 [c1]"** — 6/6 figures cited,
+  zero uncited, zero invented citation ids, and ₹48,433 is exactly the
+  4,843,300 paise independently re-summed from the store.
+- **Two configured models were wrong, and only a real key could show it.**
+  `gemini-2.5-pro` (the summary model) returns **404, "no longer available to
+  new users"**, and every Gemini *Pro* model reports **`limit: 0`/day** on the
+  free tier. Chat and summary now run on `gemini-3.5-flash`.
+- **Free-tier quota is ~20 requests/day per model**, alongside 5/min. Every doc
+  in the repo previously claimed ~10 RPM with no daily cap. A chat question
+  costs 2–3 calls, so one model id is worth roughly **8 questions a day**.
+  Corrected in DESIGN.md §9.1, USER.md §1, CLAUDE.md and BUILD_TASKS.md.
+
+**Supabase, now reachable (was entirely unverified)**
+
+- `DATABASE_URL` connects: **PostgreSQL 17.6**, `pgvector` **enabled**.
+- `public` tables: **0**. The migrations have still never been applied, so
+  T02's three open criteria remain unmet. This is the next command to run.
 
 **Schema and engine invariants**
 
@@ -101,6 +111,40 @@ Playwright + Chromium.
   1 `price_hike`, 1 `new_large_merchant`).
 
 ## Completed recently
+
+- **T07 — agent layer** (`d9d68db`, `e3904e8`). The 11 tools of DESIGN.md §9.2,
+  each hitting the engine and returning `{data, citations}`; a hand-driven
+  Gemini function-calling loop with automatic function calling *disabled*, so
+  citations are captured and the answer is audited before it reaches the user;
+  guardrails (advice boundary, untrusted-document fence, citation audit); and
+  `llm.py` as the single seam where redaction and `ai_disclosures` happen, so
+  no second code path can skip them.
+- **T10 — chat with citations** (`8472b3a`). The last missing route. Streaming
+  SSE, `aria-live`/`aria-busy`, plain-language tool indicator, the four PS
+  questions as chips, and an affordability card deep-linked to the simulator.
+  A figure arriving **without** a citation renders in an explicit unverified
+  state — the visible half of §9.3 only works if the absence is something the
+  user can see.
+- **T15 — eval harness** (`42a8649`). 25 goldens sourced from
+  `seed/expected.json`, asserted in three layers: the engine against ground
+  truth (offline, always), then the agent's tool choice and the figure it
+  *cited* (live, opt-in). The live layers are opt-in because 25 questions at
+  2–3 calls each does not fit a 20/day free tier.
+- **Four defects found by running the new code, not by reading it:**
+  1. `config.py` resolved `.env` against the **working directory**, so settings
+     loaded only when the process started inside `services/api`. Uvicorn does;
+     pytest does not, and silently got an *empty* key — a product behaving
+     exactly as though no key existed, with no error. Now anchored to the module.
+  2. The advice decline was **not deterministic**: asked about mutual funds the
+     model declined in its own words, and the guardrail reported
+     `declined=False`, because a refusal contains no advice patterns. The
+     boundary is now also checked on the *question*, before any model call —
+     spec-exact per §9.4, and it costs no quota.
+  3. My own first retry implementation retried **429**, spending three more of
+     twenty requests to be told the same thing. Quota errors are no longer
+     retried; 5xx still is.
+  4. The eval harness compared a **count** (9 subscriptions) against cited
+     *paise*. Counts are not money; they now have their own assertion.
 
 - **T08 — frontend shell, design system, a11y foundation** (`f2b90ec`).
   Green-and-beige glass in an "old money" register: warm paper ground, deep
@@ -241,21 +285,22 @@ Playwright + Chromium.
 
 **External — needs a human, cannot be fixed by writing code:**
 
-- **No Supabase project.** `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` /
-  `DATABASE_URL` are unset. The migrations have **never been executed against
-  any database**, so three T02 acceptance criteria are unmet: migrations apply
-  cleanly, a duplicate `dedupe_key` raises a unique violation, and a query as
-  user A returns zero rows of user B. See USER.md §2.
+- **Supabase project exists and is reachable, but the migrations have never
+  been applied.** PostgreSQL 17.6, `pgvector` enabled, **0 public tables**.
+  Three T02 criteria stay unmet until `npx supabase db push` runs: migrations
+  apply cleanly, a duplicate `dedupe_key` raises a unique violation, and a
+  query as user A returns zero rows of user B. This is the next command.
 - **Docker Desktop daemon not running**, so a local Postgres+pgvector container
   was not available as a fallback for the above. Starting Docker Desktop would
   unblock migration testing without needing Supabase.
-- **No Gemini API key.** Blocks T05 tier-2 categorisation and all of T07
-  (agent tools, citations, guardrails, redaction). Free, no card, ~3 minutes at
-  `aistudio.google.com/apikey` — see USER.md §1.
-  Note: the owner holds a **Google AI Plus** consumer plan. That covers the
-  Gemini *app*, not the API; API quota is per Cloud project and only billing
-  lifts it to Tier 1. The build assumes free-tier limits (~10 RPM) throughout,
-  which the tier-1 rules and the narration-hash cache are designed around.
+- **Gemini key supplied and working.** No longer a blocker for building — but
+  **free-tier quota is now the binding constraint on demoing.** ~20 requests
+  per day per model, and a chat question costs 2–3 calls, so one model id is
+  worth roughly 8 questions a day. Switching `GEMINI_MODEL_CHAT` buys another
+  bucket; nothing on the free tier survives a judge clicking around for ten
+  minutes. **Enabling billing (Tier 1) is the single highest-value remaining
+  action for the demo**, and it is also what would let the full 25-case eval
+  set run. See USER.md §1.
 - Later, in order: Telegram bot token (T14), Vercel + Render accounts (T12),
   n8n via Docker (T14).
 
@@ -275,23 +320,23 @@ orchestrator fail-fast rule; everything since has been implemented directly.
 
 ## Still not done
 
-- **T05 tier-2** — the LLM batch classifier is written but has never run; it
-  needs the Gemini key. Tier 1 covers 97.2%, so this is a refinement, not a
-  dependency.
-- **T07** agent layer — 11 tools, tool-use loop, prompts, guardrails. The
-  redaction module (`app/privacy/redact.py`, Luhn + Verhoeff checksums) is
-  built and unit-tested; the rest of T07 needs the key.
-- **T10** chat with citations — the only frontend route still missing, and the
-  only one that needs the Gemini key. The citation plumbing it depends on
-  (`CitationChip`, `TransactionDrawer`) is already built and working.
-- **T08 leftovers** — Supabase auth pages (no project exists) and an automated
-  axe run wired into CI rather than a one-off script.
-- **T12** deploy checkpoint — **now the most valuable remaining task.** Every
-  P0 route it would deploy exists and works.
+- **Apply the Supabase migrations.** The project exists and pgvector is on;
+  `public` tables is still 0. One command, and it closes three T02 criteria.
+- **T12** deploy checkpoint — **the most valuable remaining task.** Every P0
+  route it would deploy now exists and works, chat included.
+- **Enable Gemini billing (Tier 1)**, or accept ~8 chat questions per day in
+  front of judges. This also gates the full 25-case eval run (`--live-all`).
+- **T05 tier-2** — the batch classifier is written and has still never run.
+  Tier 1 covers 97.2%, so it remains a refinement, not a dependency.
+- **T08 leftovers** — Supabase auth pages and an axe run wired into CI rather
+  than a one-off script.
+- **A browser pass over `/chat`.** The route builds and its API path is
+  verified, but axe-core and the keyboard walkthrough have not been run
+  against it; every other route has. T15's axe sweep and the NVDA pass are
+  also still outstanding.
 - **T13** Budget Guard extension, **T14** n8n workflows (both P1).
-- **T15** evals + axe-core, **T16** video + submission.
-- **T10** is the only unbuilt frontend route; everything else built this
-  session is committed and the tree is clean.
+- **T16** video + submission.
+
 
 ## Unverified figures
 
@@ -314,10 +359,18 @@ orchestrator fail-fast rule; everything since has been implemented directly.
   the default only admits `localhost:3000`. That is a test-harness
   accommodation, not a product change.
 - `render.yaml` and `vercel.json` have never been used for a deploy.
-- **No Gemini API call has ever been made.** The model IDs, free-tier
-  availability and embedding dimensionality come from Google's current docs
-  (`ai.google.dev`), not from an exercised request. First real call happens at
-  T05.
+- ~~No Gemini API call has ever been made.~~ **Retired 20 Sep 2026** — calls
+  are exercised, and doing so falsified two documented model choices (see
+  Verified state). What remains unverified: the **summary generator has never
+  produced prose**, only its pre-computed facts; and no **vision** or
+  **embedding-backed document search** path has run, since no pgvector index
+  exists.
+- **`/chat` has not been through a browser or axe-core pass.** It compiles and
+  the loop is verified against the API, but the accessibility claim this repo
+  makes for every other route is not yet a claim it can make for this one.
+- **The live eval layer has only ever run its 7-case subset**, on
+  `gemini-3.5-flash-lite`. The other 18 cases have never been executed against
+  a model.
 - The 34-series / 27-anomaly counts are specific to `--seed 42 --as-of
   2026-09-19`. They move with the as-of date, since the 14-month window slides.
 - `MIN_CLUSTER_DOMINANCE = 0.30`, `MIN_GAP_CONSISTENCY = 0.75`,

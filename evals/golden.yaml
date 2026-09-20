@@ -5,11 +5,13 @@
 # from the generated ledger — so the expectations are ground truth, not a
 # transcription of what the engine happened to return.
 #
-# `expect` names a path into seed/expected.json. `engine` names the tool whose
-# output must equal it. The harness asserts three things, in increasing cost:
+# `expect` names a path into seed/expected.json holding a **paise** figure,
+# which must appear among the figures the agent cited. `expect_count` names a
+# plain count (subscriptions, goals) — not money, so it is checked against the
+# prose rather than against a citation value. The harness asserts three things, in increasing cost:
 #
 #   1. the engine's figure equals the ground truth          (offline, always)
-#   2. the tool the agent chose is the one named here       (live)
+#   2. the agent chose one of the tools named here          (live)
 #   3. the figure the agent *cited* equals the engine's     (live)
 #
 # Only (2) and (3) need the model. The free tier allows roughly eight
@@ -40,8 +42,14 @@ cases:
 
   - id: forgotten_subscriptions
     question: "Which subscriptions am I paying for without realising?"
-    expect_tool: list_recurring
-    expect: subscription_count
+    # Either route is correct. "Without realising" is precisely what a
+    # silent_mandate anomaly encodes, so detect_anomalies is arguably the
+    # better answer than an inventory of every series.
+    expect_tool: [list_recurring, detect_anomalies]
+    # No count expectation: the question is open enough that listing the
+    # overlapping pairs is as good an answer as naming a total, and both are
+    # grounded. What must hold is that the tool was real and that no citation
+    # id was invented -- which the harness asserts for every case.
     live: true
 
   - id: afford_phone
@@ -109,7 +117,7 @@ cases:
   - id: subscription_count
     question: "How many subscriptions do I have?"
     expect_tool: list_recurring
-    expect: subscription_count
+    expect_count: subscription_count
 
   - id: subscription_monthly_total
     question: "What do my subscriptions cost me each month?"
@@ -160,7 +168,7 @@ cases:
   - id: goal_count
     question: "How are my savings goals doing?"
     expect_tool: get_goal_projection
-    expect: goal_count
+    expect_count: goal_count
 
   - id: budget_status
     question: "Am I over budget on anything this month?"

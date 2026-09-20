@@ -24,6 +24,7 @@ that cannot pass.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -82,11 +83,14 @@ def test_the_seed_matches_its_own_ground_truth(snapshot: Snapshot) -> None:
 
 
 @pytest.mark.parametrize(
-    "case", [c for c in CASES if c.get("expect")], ids=lambda c: c["id"]
+    "case",
+    [c for c in CASES if c.get("expect") or c.get("expect_count")],
+    ids=lambda c: c["id"],
 )
 def test_ground_truth_value_exists(case: dict[str, Any]) -> None:
-    """Every `expect` path must resolve — a typo here would silently pass."""
-    assert lookup(case["expect"]) is not None
+    """Every expectation path must resolve — a typo would silently pass."""
+    path = case.get("expect") or case["expect_count"]
+    assert lookup(path) is not None
 
 
 def test_top_category_per_month_matches_the_engine(snapshot: Snapshot) -> None:
@@ -187,8 +191,21 @@ def test_agent_cites_the_engines_figure(
     assert not answer.audit.unknown_ids, f"invented citation ids: {answer.audit.unknown_ids}"
 
     if case.get("expect_tool"):
-        assert case["expect_tool"] in answer.tools_used, (
-            f"expected {case['expect_tool']}, used {answer.tools_used}"
+        # A case may name several acceptable tools: more than one route can be
+        # correct, and pinning the agent to one of them tests the harness's
+        # opinion rather than the product.
+        wanted = case["expect_tool"]
+        acceptable = wanted if isinstance(wanted, list) else [wanted]
+        assert any(t in answer.tools_used for t in acceptable), (
+            f"expected one of {acceptable}, used {answer.tools_used}"
+        )
+
+    if case.get("expect_count"):
+        # A count is not a money figure, so it has no citation value to match.
+        # It must still be the engine's number, stated in the answer.
+        target = lookup(case["expect_count"])
+        assert str(target) in re.findall("[0-9]+", answer.text), (
+            f"expected the count {target} in the answer, got: {answer.text[:200]}"
         )
 
     if case.get("expect") and case.get("tolerance_paise", 0) is not None:
