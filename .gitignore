@@ -34,6 +34,9 @@ seed/output/
 *.pdf
 !docs/**/*.pdf
 uploads/
+# Playwright run artefacts (traces, screenshots, .last-run.json)
+apps/web/test-results/
+apps/web/playwright-report/
 # The offline SQLite store standing in for Supabase. Generated on first boot,
 # holds a real ledger, and must never be committed.
 *.db
