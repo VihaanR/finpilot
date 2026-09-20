@@ -117,6 +117,29 @@ create table if not exists dismissals (
   dismissed_at text not null
 );
 
+-- Soft delete, as a side table rather than a column on `transactions`.
+-- Same shape as `dismissals` above, and for the same reasons: the ledger
+-- rows stay byte-identical to what was ingested, and a removal is undone by
+-- deleting one row rather than by rewriting history.
+create table if not exists deleted_transactions (
+  txn_id text primary key,
+  deleted_at text not null,
+  reason text
+);
+
+-- What the Budget Guard extension actually stopped, reported back from the
+-- browser. Before this the extension was a dead end: it intercepted a
+-- checkout and the web app never knew, so the two halves of the product had
+-- no shared memory of the same event.
+create table if not exists guard_events (
+  id text primary key,
+  created_at text not null,
+  site text not null,
+  outcome text not null,
+  cart_paise integer not null default 0,
+  discretionary_paise integer not null default 0
+);
+
 create table if not exists ai_disclosures (
   id text primary key,
   created_at text not null,
@@ -138,8 +161,8 @@ create table if not exists consents (
 
 _USER_TABLES = (
     "transactions", "documents", "accounts", "goals", "budgets",
-    "merchant_rules", "acknowledgements", "dismissals", "ai_disclosures",
-    "consents",
+    "merchant_rules", "acknowledgements", "dismissals", "deleted_transactions",
+    "guard_events", "ai_disclosures", "consents",
 )
 
 
@@ -311,7 +334,10 @@ class Store:
         since: str | None = None,
         ids: Sequence[str] | None = None,
     ) -> list[dict[str, Any]]:
-        sql = "select * from transactions where 1=1"
+        sql = (
+            "select * from transactions "
+            "where id not in (select txn_id from deleted_transactions)"
+        )
         args: list[Any] = []
         if ids is not None:
             if not ids:
@@ -340,7 +366,9 @@ class Store:
         """Stored rows adapted into the engine's frozen dataclasses."""
         out: list[Txn] = []
         for row in self.conn.execute(
-            "select * from transactions order by txn_date"
+            "select * from transactions "
+            "where id not in (select txn_id from deleted_transactions) "
+            "order by txn_date"
         ).fetchall():
             out.append(
                 Txn(
@@ -482,6 +510,63 @@ class Store:
             str(r["anomaly_key"])
             for r in self.conn.execute("select anomaly_key from dismissals").fetchall()
         }
+
+    # --- Soft delete --------------------------------------------------------
+
+    def soft_delete_transaction(self, txn_id: str, *, reason: str | None = None) -> None:
+        """Hide one transaction from every read path, reversibly.
+
+        `insert or replace` keyed on `txn_id` makes this idempotent, so a
+        double-clicked Apply is harmless.
+        """
+        self.conn.execute(
+            "insert or replace into deleted_transactions (txn_id, deleted_at, reason) "
+            "values (?,?,?)",
+            (txn_id, _now(), reason),
+        )
+        self.conn.commit()
+
+    def restore_transaction(self, txn_id: str) -> None:
+        self.conn.execute("delete from deleted_transactions where txn_id = ?", (txn_id,))
+        self.conn.commit()
+
+    def deleted_transaction_ids(self) -> set[str]:
+        return {
+            str(r["txn_id"])
+            for r in self.conn.execute("select txn_id from deleted_transactions").fetchall()
+        }
+
+    # --- Budget Guard (browser extension) -----------------------------------
+
+    def record_guard_event(
+        self, *, site: str, outcome: str, cart_paise: int, discretionary_paise: int
+    ) -> str:
+        eid = uuid.uuid4().hex
+        self.conn.execute(
+            "insert into guard_events "
+            "(id, created_at, site, outcome, cart_paise, discretionary_paise) "
+            "values (?,?,?,?,?,?)",
+            (eid, _now(), site, outcome, int(cart_paise), int(discretionary_paise)),
+        )
+        self.conn.commit()
+        return eid
+
+    def guard_events(self, limit: int = 20) -> list[dict[str, Any]]:
+        return [
+            dict(r)
+            for r in self.conn.execute(
+                "select * from guard_events order by created_at desc limit ?", (limit,)
+            ).fetchall()
+        ]
+
+    def transaction_exists(self, txn_id: str) -> bool:
+        """Is this a real, not-already-removed transaction id?"""
+        row = self.conn.execute(
+            "select 1 from transactions "
+            "where id = ? and id not in (select txn_id from deleted_transactions)",
+            (txn_id,),
+        ).fetchone()
+        return row is not None
 
     # --- Privacy ------------------------------------------------------------
 

@@ -38,7 +38,58 @@ def ctx(snapshot) -> T.ToolContext:
 def test_declarations_match_implementations() -> None:
     """A renamed parameter must not be able to drift from its declaration."""
     assert {d["name"] for d in T.TOOL_DECLARATIONS} == set(T.TOOLS)
-    assert len(T.TOOLS) == 11, "DESIGN.md 9.2 specifies exactly 11 tools"
+    assert {d["name"] for d in T.ACT_TOOL_DECLARATIONS} == set(T.ACT_TOOLS)
+    # DESIGN.md 9.2's original 11, plus `list_guard_events` once the browser
+    # extension started reporting its intercepts back to the API.
+    assert len(T.TOOLS) == 12
+    assert len(T.ACT_TOOLS) == 3
+
+
+def test_act_tools_are_unreachable_without_an_action_registry(ctx: T.ToolContext) -> None:
+    """The read-only chat surface must not be able to stage a change.
+
+    `/api/agent/ask` builds its context without an `ActionRegistry`, and that
+    absence is what `dispatch` keys on — so a model that calls a staging tool
+    by name on that endpoint gets "no such tool", not a staged action.
+    """
+    assert ctx.actions is None
+    result = T.dispatch(
+        "propose_create_goal",
+        {"name": "Car", "amount_value": 50, "amount_unit": "lakh"},
+        ctx,
+    )
+    assert "error" in result and "No such tool" in result["error"]
+
+
+def test_act_tools_stage_without_mutating(snapshot) -> None:
+    """Staging is not doing. Nothing reaches the store until apply."""
+    ctx = T.ToolContext(
+        snapshot=snapshot, citations=T.CitationRegistry(), actions=T.ActionRegistry()
+    )
+    before = len(snapshot.store.goals())
+    result = T.dispatch(
+        "propose_create_goal",
+        {"name": "Car", "amount_value": 50, "amount_unit": "lakh"},
+        ctx,
+    )
+    assert "error" not in result
+    staged = ctx.actions.as_list()
+    assert len(staged) == 1
+    assert staged[0]["kind"] == "create_goal"
+    # 50 lakh in paise, computed by Python and never by the model.
+    assert staged[0]["params"]["target_paise"] == 500_000_000
+    assert len(snapshot.store.goals()) == before, "staging must not write"
+
+
+def test_propose_delete_rejects_an_invented_transaction_id(snapshot) -> None:
+    ctx = T.ToolContext(
+        snapshot=snapshot, citations=T.CitationRegistry(), actions=T.ActionRegistry()
+    )
+    result = T.dispatch(
+        "propose_delete_transaction", {"txn_id": "not-a-real-id", "reason": "dupe"}, ctx
+    )
+    assert result.get("no_data") is True
+    assert ctx.actions.as_list() == []
 
 
 def test_citation_ids_are_sequential_and_unique(ctx: T.ToolContext) -> None:

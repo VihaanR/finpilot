@@ -194,6 +194,15 @@ test.describe("checkout click interception", () => {
     await page.locator(".finpilot-guard-secondary", { hasText: "Continue anyway" }).click();
     await expect(page.locator("#finpilot-guard-overlay")).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => window.location.hash)).toBe("#navigated");
+    // Overriding the warning is reported too — the dashboard can only say
+    // what Budget Guard stopped if it also hears what it did not.
+    const sent = await page.evaluate(() => (window as any).__sentMessages);
+    expect(sent).toEqual([
+      expect.objectContaining({
+        type: "guard-outcome",
+        entry: expect.objectContaining({ outcome: "continue" }),
+      }),
+    ]);
   });
 
   test("Wait 24 hours keeps the click blocked and records a cooldown", async ({ page }) => {
@@ -203,7 +212,10 @@ test.describe("checkout click interception", () => {
     expect(await page.evaluate(() => window.location.hash)).toBe("");
     const sent = await page.evaluate(() => (window as any).__sentMessages);
     expect(sent).toEqual([
-      expect.objectContaining({ type: "record-cooldown", entry: expect.objectContaining({ site: "amazon.in" }) }),
+      expect.objectContaining({
+        type: "guard-outcome",
+        entry: expect.objectContaining({ site: "amazon.in", outcome: "wait" }),
+      }),
     ]);
   });
 

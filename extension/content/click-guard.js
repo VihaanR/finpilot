@@ -61,16 +61,23 @@ function finpilotGuardCheckoutClicks({ site, isCheckoutTrigger, computeTotal }) 
           cartPaise,
           discretionaryPaise: discretionary,
           onAction: (action) => {
-            if (action === "continue") {
-              proceed();
-            } else if (action === "wait") {
-              chrome.runtime.sendMessage({
-                type: "record-cooldown",
-                entry: { site, cart_paise: cartPaise, url: window.location.href },
-              });
-            }
-            // "dismiss" (save to wishlist instead): do nothing — the click
-            // stays swallowed and the page never navigates.
+            // Every outcome is reported, not just "wait". What the user did
+            // when warned is the interesting signal, and the dashboard can
+            // only show "Budget Guard stopped 3 purchases" if it hears about
+            // the ones that were *not* stopped too.
+            chrome.runtime.sendMessage({
+              type: "guard-outcome",
+              entry: {
+                site,
+                outcome: action,
+                cart_paise: cartPaise,
+                discretionary_paise: discretionary,
+                url: window.location.href,
+              },
+            });
+            if (action === "continue") proceed();
+            // "wait" and "dismiss": do nothing — the click stays swallowed
+            // and the page never navigates.
           },
         });
       });

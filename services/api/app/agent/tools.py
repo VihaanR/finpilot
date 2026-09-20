@@ -31,6 +31,12 @@ from ..engine.types import (
 )
 from ..models.taxonomy import display_name
 from ..services.views import Snapshot, anomaly_key, jsonable
+from .money import MAX_GOAL_PAISE, parse_indian_amount
+
+#: `get_anomaly_transactions` takes a parameter called `anomaly_key`, which
+#: shadows the imported function inside that body. Aliased here so the
+#: function stays reachable.
+_anomaly_key = anomaly_key
 
 #: A tool may never hand back the whole ledger. The model pays for every token
 #: of a tool result, and a 936-row dump would crowd out the conversation
@@ -101,12 +107,62 @@ class ToolResult:
         return {"data": jsonable(self.data), "citations": self.citations}
 
 
+class ActionRegistry:
+    """Actions the model has *staged* during one request. Nothing is applied.
+
+    Mirrors `CitationRegistry` deliberately: same per-request lifetime, same
+    short ids (``a1``, ``a2``), same split between a model-facing stub and the
+    full record the UI needs.
+
+    The separation matters more here than it does for citations. A staged
+    action is a proposal the user has not yet seen, let alone approved, so the
+    model never gets to execute one — it describes what it wants done, the
+    browser renders it as a card, and `/api/agent/actions/apply` is the only
+    thing that writes. That keeps the architectural claim intact: the model
+    selects, deterministic code computes and mutates.
+    """
+
+    def __init__(self) -> None:
+        self._items: list[dict[str, Any]] = []
+
+    def add(
+        self,
+        *,
+        kind: str,
+        title: str,
+        detail: str,
+        params: dict[str, Any],
+        destructive: bool = False,
+        txn_ids: Sequence[str] = (),
+    ) -> dict[str, Any]:
+        aid = f"a{len(self._items) + 1}"
+        self._items.append(
+            {
+                "id": aid,
+                "kind": kind,
+                "title": title,
+                "detail": detail,
+                "params": params,
+                "destructive": bool(destructive),
+                "txn_ids": list(txn_ids),
+            }
+        )
+        # The model is told the action exists and what it is, but not handed
+        # the params back — it wrote them, and echoing them wastes tokens.
+        return {"id": aid, "kind": kind, "title": title, "detail": detail}
+
+    def as_list(self) -> list[dict[str, Any]]:
+        return [dict(item) for item in self._items]
+
+
 @dataclass
 class ToolContext:
     """Everything a tool is allowed to touch."""
 
     snapshot: Snapshot
     citations: CitationRegistry
+    #: Present only in act mode. Read tools never touch it.
+    actions: ActionRegistry | None = None
 
 
 # --- Period parsing ---------------------------------------------------------
@@ -147,6 +203,28 @@ def parse_period(period: str | None, *, as_of: date) -> tuple[date, date]:
 
 def _label_month(start: date) -> str:
     return start.strftime("%B %Y")
+
+
+def _format_paise(paise: int) -> str:
+    """Rupees in Indian digit grouping, for an action card's own label.
+
+    This is a *display* string on a staged action, not prose the model wrote,
+    so it never needs a citation marker — and keeping the figure here rather
+    than in the answer is what stops the citation audit flagging a number the
+    user themselves supplied.
+    """
+    rupees = paise // 100
+    s = str(abs(rupees))
+    if len(s) > 3:
+        head, tail = s[:-3], s[-3:]
+        parts = []
+        while len(head) > 2:
+            parts.insert(0, head[-2:])
+            head = head[:-2]
+        if head:
+            parts.insert(0, head)
+        s = ",".join(parts + [tail])
+    return f"₹{'-' if rupees < 0 else ''}{s}"
 
 
 def _txn_row(txn: Txn) -> dict[str, Any]:
@@ -627,6 +705,122 @@ def search_documents(ctx: ToolContext, *, query: str) -> ToolResult:
 # --- Registry ---------------------------------------------------------------
 
 _INT = {"type": "integer"}
+# --- Act mode: finding ids, and staging changes -----------------------------
+
+
+def get_anomaly_transactions(ctx: ToolContext, *, anomaly_key: str) -> ToolResult:
+    """The individual transactions behind one anomaly, with their ids.
+
+    `detect_anomalies` deliberately reports only a count, because the citation
+    that carries the real ids is built for the UI's drawer, not for the model.
+    That is the right default — but it leaves the model unable to act on
+    "this charge looks duplicated", since it never learns which row to remove.
+    This is the bridge, and it is why it exists as a separate call rather than
+    by widening the anomaly payload: ids are handed over only when the model
+    has a reason to ask for them.
+    """
+    snap = ctx.snapshot
+    match = next((a for a in snap.anomalies if _anomaly_key(a) == anomaly_key), None)
+    if match is None:
+        raise NoDataError(f"No anomaly with key {anomaly_key!r}.")
+    by_id = {t.id: t for t in snap.txns}
+    rows = [_txn_row(by_id[i]) for i in match.txn_ids if i in by_id]
+    if not rows:
+        raise NoDataError("That anomaly's transactions are no longer in the ledger.")
+    return ToolResult(
+        data={"anomaly_key": anomaly_key, "explanation": match.explanation, "transactions": rows}
+    )
+
+
+def list_guard_events(ctx: ToolContext, *, limit: int = 20) -> ToolResult:
+    """What the Budget Guard browser extension intercepted at checkout."""
+    events = ctx.snapshot.store.guard_events(limit=max(1, min(int(limit), 50)))
+    if not events:
+        raise NoDataError("Budget Guard hasn't intercepted any checkouts yet.")
+    stopped = [e for e in events if e["outcome"] in ("wait", "dismiss")]
+    return ToolResult(
+        data={
+            "count": len(events),
+            "stopped_count": len(stopped),
+            "avoided_paise": sum(int(e["cart_paise"]) for e in stopped),
+            "events": [
+                {
+                    "site": e["site"],
+                    "outcome": e["outcome"],
+                    "cart_paise": int(e["cart_paise"]),
+                    "when": e["created_at"],
+                }
+                for e in events[:MAX_ROWS]
+            ],
+        }
+    )
+
+
+def _require_actions(ctx: ToolContext) -> ActionRegistry:
+    if ctx.actions is None:
+        raise ValueError("This conversation cannot make changes.")
+    return ctx.actions
+
+
+def propose_create_goal(
+    ctx: ToolContext,
+    *,
+    name: str,
+    amount_value: float,
+    amount_unit: str,
+    target_date: str | None = None,
+    priority: int = 0,
+) -> ToolResult:
+    """Stage a new savings goal for the user to confirm. Does not create it."""
+    actions = _require_actions(ctx)
+    label = (name or "").strip()
+    if not label:
+        raise ValueError("A goal needs a name.")
+    # The model passes the tokens it heard; the arithmetic happens here.
+    target_paise = parse_indian_amount(amount_value, amount_unit)
+    if target_paise > MAX_GOAL_PAISE:
+        raise ValueError("That target is implausibly large for a savings goal.")
+    when = None
+    if target_date:
+        when = date.fromisoformat(target_date).isoformat()
+
+    action = actions.add(
+        kind="create_goal",
+        title=f"Create goal: {label}",
+        detail=_format_paise(target_paise) + (f" · by {when}" if when else " · no target date"),
+        params={
+            "name": label,
+            "amount_value": float(amount_value),
+            "amount_unit": amount_unit,
+            "target_paise": target_paise,
+            "target_date": when,
+            "priority": int(priority or 0),
+        },
+    )
+    return ToolResult(data={"staged": action})
+
+
+def propose_delete_transaction(ctx: ToolContext, *, txn_id: str, reason: str) -> ToolResult:
+    """Stage the removal of one transaction for the user to confirm."""
+    actions = _require_actions(ctx)
+    txn = next((t for t in ctx.snapshot.txns if t.id == txn_id), None)
+    if txn is None:
+        # A model that invents an id gets an ordinary "I don't have that"
+        # turn rather than a staged action pointing at nothing.
+        raise NoDataError(f"No transaction with id {txn_id!r} in the ledger.")
+
+    citation = ctx.citations.add(f"{txn.normalized_merchant}, {txn.txn_date}", txn.amount_paise, [txn.id])
+    action = actions.add(
+        kind="delete_transaction",
+        title=f"Remove {txn.normalized_merchant}",
+        detail=f"{_format_paise(txn.amount_paise)} · {txn.txn_date.isoformat()} · {reason}",
+        params={"txn_id": txn.id, "reason": reason},
+        destructive=True,
+        txn_ids=[txn.id],
+    )
+    return ToolResult(data={"staged": action}, citations=[citation])
+
+
 _STR = {"type": "string"}
 
 #: Gemini function declarations. Kept next to the implementations so a
@@ -716,6 +910,52 @@ TOOL_DECLARATIONS: list[dict[str, Any]] = [
         "description": "Search uploaded statement and bill documents by filename or bank.",
         "parameters": {"type": "object", "properties": {"query": _STR}, "required": ["query"]},
     },
+    {
+        "name": "list_guard_events",
+        "description": "Checkouts the Budget Guard browser extension intercepted for being over budget, and what the user chose. Use for 'what did Budget Guard stop?'.",
+        "parameters": {"type": "object", "properties": {"limit": _INT}},
+    },
+]
+
+#: Act mode only. Kept as a separate list so `/api/agent/ask` cannot reach
+#: them: the read-only chat surface must stay incapable of staging a change.
+ACT_TOOL_DECLARATIONS: list[dict[str, Any]] = [
+    {
+        "name": "get_anomaly_transactions",
+        "description": "The individual transactions behind one anomaly, including their ids. Call this after detect_anomalies when you need a transaction id to act on, e.g. for a duplicate charge.",
+        "parameters": {
+            "type": "object",
+            "properties": {"anomaly_key": {"type": "string", "description": "The anomaly_key from detect_anomalies."}},
+            "required": ["anomaly_key"],
+        },
+    },
+    {
+        "name": "propose_create_goal",
+        "description": "Stage a new savings goal for the user to confirm. This does NOT create it — the user approves it in the UI. Pass the amount exactly as the user said it: 50 lakh is amount_value=50, amount_unit='lakh'. Never convert to rupees yourself.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "What the goal is for, e.g. 'Car'."},
+                "amount_value": {"type": "number", "description": "The number the user said, e.g. 50."},
+                "amount_unit": {"type": "string", "enum": ["rupee", "thousand", "lakh", "crore"], "description": "The unit the user said."},
+                "target_date": {"type": "string", "description": "Optional target date, YYYY-MM-DD."},
+                "priority": {"type": "integer", "description": "0 is highest. Omit unless the user ranks it."},
+            },
+            "required": ["name", "amount_value", "amount_unit"],
+        },
+    },
+    {
+        "name": "propose_delete_transaction",
+        "description": "Stage the removal of one transaction for the user to confirm. This does NOT remove it. Requires a real transaction id — get one from query_transactions or get_anomaly_transactions first.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "txn_id": {"type": "string", "description": "The transaction's id."},
+                "reason": {"type": "string", "description": "Short reason, e.g. 'duplicate charge'."},
+            },
+            "required": ["txn_id", "reason"],
+        },
+    },
 ]
 
 TOOLS: dict[str, Callable[..., ToolResult]] = {
@@ -730,9 +970,21 @@ TOOLS: dict[str, Callable[..., ToolResult]] = {
     "simulate_scenario": simulate_scenario,
     "get_safe_to_spend": get_safe_to_spend,
     "search_documents": search_documents,
+    "list_guard_events": list_guard_events,
 }
 
+ACT_TOOLS: dict[str, Callable[..., ToolResult]] = {
+    "get_anomaly_transactions": get_anomaly_transactions,
+    "propose_create_goal": propose_create_goal,
+    "propose_delete_transaction": propose_delete_transaction,
+}
+
+#: Everything reachable in act mode: the read tools plus the staging ones.
+ALL_TOOLS: dict[str, Callable[..., ToolResult]] = {**TOOLS, **ACT_TOOLS}
+ALL_TOOL_DECLARATIONS: list[dict[str, Any]] = TOOL_DECLARATIONS + ACT_TOOL_DECLARATIONS
+
 assert {d["name"] for d in TOOL_DECLARATIONS} == set(TOOLS), "declarations and implementations drifted"
+assert {d["name"] for d in ACT_TOOL_DECLARATIONS} == set(ACT_TOOLS), "act declarations and implementations drifted"
 
 
 def dispatch(name: str, args: dict[str, Any], ctx: ToolContext) -> dict[str, Any]:
@@ -742,7 +994,10 @@ def dispatch(name: str, args: dict[str, Any], ctx: ToolContext) -> dict[str, Any
     the loop can hand it back to the model as a tool response and let it
     recover — a tool that 500s mid-conversation ends the turn with nothing.
     """
-    fn = TOOLS.get(name)
+    # Act tools are only reachable when the context carries an ActionRegistry;
+    # `_require_actions` is the second line of defence if one ever leaks into
+    # a read-only turn.
+    fn = ALL_TOOLS.get(name) if ctx.actions is not None else TOOLS.get(name)
     if fn is None:
         return {"error": f"No such tool: {name}"}
     try:

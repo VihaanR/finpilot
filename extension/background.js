@@ -51,6 +51,48 @@ async function recordCooldown(entry) {
   await chrome.storage.local.set({ cooldowns: list.slice(-20) });
 }
 
+/**
+ * Report an intercept to FinPilot itself, so the web app and the extension
+ * share one history instead of each knowing half of it.
+ *
+ * Best-effort by design: the local cooldown is written first and never
+ * depends on this succeeding. If the API is asleep or unreachable, the guard
+ * still works — it just doesn't show up on the dashboard.
+ *
+ * The URL is deliberately not sent. The server has no need for what was in
+ * the cart, and the local record already has it.
+ */
+async function reportGuardOutcome(entry) {
+  const base = await apiBase();
+  try {
+    await fetch(`${base}/api/guard/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        site: entry.site,
+        outcome: entry.outcome,
+        cart_paise: entry.cart_paise,
+        discretionary_paise: entry.discretionary_paise,
+      }),
+    });
+  } catch {
+    /* offline, asleep, or blocked — the guard itself is unaffected */
+  }
+}
+
+async function handleGuardOutcome(entry) {
+  // "Wait 24 hours" is the only outcome that starts a local cooldown; the
+  // others are recorded but must not suppress the next interstitial.
+  if (entry && entry.outcome === "wait") {
+    await recordCooldown({
+      site: entry.site,
+      cart_paise: entry.cart_paise,
+      url: entry.url,
+    });
+  }
+  await reportGuardOutcome(entry || {});
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.alarms.create(REFRESH_ALARM, { periodInMinutes: 15 });
   refreshBudget();
@@ -71,6 +113,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
   if (message?.type === "record-cooldown") {
     recordCooldown(message.entry).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+  if (message?.type === "guard-outcome") {
+    handleGuardOutcome(message.entry).then(() => sendResponse({ ok: true }));
     return true;
   }
   return false;

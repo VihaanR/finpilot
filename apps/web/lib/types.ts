@@ -286,3 +286,32 @@ export interface Vault {
   };
   ai_configured: boolean;
 }
+
+// --- Agentic actions (dashboard panel) --------------------------------------
+// Staged by the agent, applied only after the user approves them. `params` is
+// echoed straight back to /api/agent/actions/apply, which re-validates every
+// field server-side — nothing here is trusted on its own.
+
+export interface ProposedAction {
+  id: string;
+  kind: "create_goal" | "delete_transaction";
+  title: string;
+  detail: string;
+  destructive: boolean;
+  txn_ids: string[];
+  params: Record<string, unknown>;
+}
+
+export interface ApplyResult {
+  id: string;
+  ok: boolean;
+  kind?: string;
+  result?: Record<string, unknown>;
+  error?: string;
+}
+
+export interface ApplyResponse {
+  results: ApplyResult[];
+  applied: number;
+  message: string;
+}

@@ -25,7 +25,14 @@ from ..config import settings
 from ..services.views import Snapshot
 from . import guardrails, llm
 from .prompts import system_prompt
-from .tools import TOOL_DECLARATIONS, CitationRegistry, ToolContext, dispatch
+from .tools import (
+    ALL_TOOL_DECLARATIONS,
+    TOOL_DECLARATIONS,
+    ActionRegistry,
+    CitationRegistry,
+    ToolContext,
+    dispatch,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +50,9 @@ TOOL_LABELS = {
     "simulate_scenario": "Running the what-if",
     "get_safe_to_spend": "Working out what's safe to spend",
     "search_documents": "Searching your uploaded documents",
+    "get_anomaly_transactions": "Finding the exact transactions",
+    "propose_create_goal": "Setting up the goal",
+    "propose_delete_transaction": "Preparing to remove that transaction",
 }
 
 
@@ -52,6 +62,8 @@ class AgentAnswer:
     citations: list[dict[str, Any]] = field(default_factory=list)
     tools_used: list[str] = field(default_factory=list)
     declined: bool = False
+    #: Staged, unapplied changes. Always empty in ask mode.
+    actions: list[dict[str, Any]] = field(default_factory=list)
     audit: guardrails.CitationAudit | None = None
     error: str | None = None
 
@@ -134,6 +146,7 @@ def run(
     *,
     document_text: str | None = None,
     max_iterations: int = llm.MAX_TOOL_ITERATIONS,
+    mode: str = "ask",
 ) -> Iterator[dict[str, Any]]:
     """Answer one question, yielding events as it goes.
 
@@ -142,7 +155,16 @@ def run(
     citation list for the UI.
     """
     registry = CitationRegistry()
-    ctx = ToolContext(snapshot=snapshot, citations=registry)
+    # Act mode is the only thing that hands the model an ActionRegistry, and
+    # `dispatch` uses its presence to decide whether the staging tools are
+    # reachable at all. `/api/agent/ask` therefore cannot propose a change
+    # even if a model tries to call one by name.
+    acting = mode == "act"
+    ctx = ToolContext(
+        snapshot=snapshot,
+        citations=registry,
+        actions=ActionRegistry() if acting else None,
+    )
     answer = AgentAnswer()
 
     # The advice boundary is checked on the question first, so the decline is
@@ -158,6 +180,7 @@ def run(
             "declined": True,
             "uncited_figures": [],
             "unknown_citation_ids": [],
+            "actions": [],
             "error": None,
         }
         return
@@ -169,7 +192,13 @@ def run(
             "computed by the engine and works without it."
         )
         yield {"type": "error", "message": answer.error}
-        yield {"type": "done", "citations": [], "tools_used": [], "error": answer.error}
+        yield {
+            "type": "done",
+            "citations": [],
+            "tools_used": [],
+            "actions": [],
+            "error": answer.error,
+        }
         return
 
     client = llm.client()
@@ -185,10 +214,10 @@ def run(
         prompt_text = f"{prompt_text}\n\n{guardrails.wrap_untrusted(document_text)}"
 
     messages: list[dict[str, Any]] = [
-        {"role": "system", "content": system_prompt(snapshot.as_of)},
+        {"role": "system", "content": system_prompt(snapshot.as_of, acting=acting)},
         {"role": "user", "content": prompt_text},
     ]
-    tools = _decl_to_sdk(TOOL_DECLARATIONS)
+    tools = _decl_to_sdk(ALL_TOOL_DECLARATIONS if acting else TOOL_DECLARATIONS)
 
     final_text = ""
     for _ in range(max_iterations):
@@ -250,6 +279,7 @@ def run(
 
     answer.text = final_text
     answer.citations = registry.as_list()
+    answer.actions = ctx.actions.as_list() if ctx.actions else []
 
     if final_text:
         yield {"type": "text", "text": final_text, "declined": answer.declined}
@@ -260,6 +290,7 @@ def run(
         "declined": answer.declined,
         "uncited_figures": list(answer.audit.uncited) if answer.audit else [],
         "unknown_citation_ids": list(answer.audit.unknown_ids) if answer.audit else [],
+        "actions": answer.actions,
         "error": answer.error,
     }
 
@@ -275,6 +306,7 @@ def ask(question: str, snapshot: Snapshot, **kwargs: Any) -> AgentAnswer:
             answer.declined = bool(event.get("declined"))
         elif event["type"] == "done":
             answer.citations = event["citations"]
+            answer.actions = event.get("actions", [])
             answer.error = event.get("error")
             answer.audit = guardrails.audit_citations(
                 answer.text, {str(c["id"]) for c in answer.citations}

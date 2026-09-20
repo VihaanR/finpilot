@@ -20,6 +20,7 @@ from fastapi import APIRouter, Body, HTTPException
 from sse_starlette.sse import EventSourceResponse
 
 from ..agent import llm, loop, summary as summary_agent
+from ..agent.money import MAX_GOAL_PAISE, parse_indian_amount
 from ..deps import get_snapshot, get_store
 
 router = APIRouter(prefix="/api", tags=["agent"])
@@ -83,6 +84,135 @@ async def ask(payload: dict[str, Any] = Body(...)) -> EventSourceResponse:
     return EventSourceResponse(stream())
 
 
+@router.post("/agent/act")
+async def act(payload: dict[str, Any] = Body(...)) -> EventSourceResponse:
+    """Same as `/agent/ask`, but the model may stage changes.
+
+    Separate from `/agent/ask` rather than a flag on it so the read-only chat
+    surface keeps its exact behaviour — the eval goldens run through `/ask`,
+    and `/chat` should not be able to offer to delete anything.
+
+    Nothing here writes. The `done` event carries staged actions; applying one
+    is a second, explicit call to `/agent/actions/apply`.
+    """
+    question = str(payload.get("question", "")).strip()
+    if not question:
+        raise HTTPException(status_code=422, detail="Tell me what you'd like to do.")
+    if len(question) > 2000:
+        raise HTTPException(status_code=422, detail="That request is too long.")
+    _require_consent()
+
+    snapshot = get_snapshot()
+
+    async def stream() -> AsyncIterator[dict[str, str]]:
+        for event in loop.run(question, snapshot, mode="act"):
+            kind = event.pop("type")
+            yield {"event": kind, "data": json.dumps(event)}
+
+    return EventSourceResponse(stream())
+
+
+def _apply_create_goal(store: Any, params: dict[str, Any]) -> dict[str, Any]:
+    name = str(params.get("name", "")).strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="A goal needs a name.")
+
+    # Re-derived here rather than trusted. The client echoes the action back
+    # because the staging registry is per-request and gone once the stream
+    # closes, so `target_paise` arriving in the body is a *claim*, not a fact.
+    try:
+        target_paise = parse_indian_amount(
+            params.get("amount_value"), str(params.get("amount_unit", ""))
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    if target_paise > MAX_GOAL_PAISE:
+        raise HTTPException(status_code=422, detail="That target is implausibly large.")
+
+    target_date = params.get("target_date")
+    if target_date:
+        try:
+            target_date = date.fromisoformat(str(target_date)).isoformat()
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Target date must be YYYY-MM-DD.") from None
+    else:
+        # `goals.project` needs a horizon to report a verdict against. Five
+        # years is a neutral default for an undated aspiration, and the user
+        # can see it on the goal afterwards.
+        target_date = date(get_snapshot().as_of.year + 5, 12, 31).isoformat()
+
+    goal_id = store.upsert_goal(
+        name=name,
+        target_paise=target_paise,
+        current_paise=0,
+        target_date=target_date,
+        priority=int(params.get("priority") or 0),
+        monthly_contribution_paise=0,
+    )
+    return {"goal_id": goal_id, "name": name, "target_paise": target_paise, "target_date": target_date}
+
+
+def _apply_delete_transaction(store: Any, params: dict[str, Any]) -> dict[str, Any]:
+    txn_id = str(params.get("txn_id", "")).strip()
+    if not txn_id:
+        raise HTTPException(status_code=422, detail="Which transaction?")
+    if not store.transaction_exists(txn_id):
+        raise HTTPException(status_code=404, detail="No such transaction, or it is already removed.")
+    reason = str(params.get("reason") or "removed by agent")[:200]
+    store.soft_delete_transaction(txn_id, reason=reason)
+    return {"txn_id": txn_id, "reason": reason, "reversible": True}
+
+
+#: The only things an approved action can do. Mirrors `TOOLS`, but for writes.
+EXECUTORS = {
+    "create_goal": _apply_create_goal,
+    "delete_transaction": _apply_delete_transaction,
+}
+
+
+@router.post("/agent/actions/apply")
+def apply_actions(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    """Execute actions the user approved.
+
+    Deterministic: the model is not involved, and every parameter is
+    re-validated from scratch. A per-action result is returned rather than
+    failing the batch, so approving two things and having one fail still
+    applies the other and says which broke.
+    """
+    _require_consent()
+    raw = payload.get("actions")
+    if not isinstance(raw, list) or not raw:
+        raise HTTPException(status_code=422, detail="No actions to apply.")
+    if len(raw) > 10:
+        raise HTTPException(status_code=422, detail="Too many actions at once.")
+
+    store = get_store()
+    results: list[dict[str, Any]] = []
+    for item in raw:
+        action_id = str((item or {}).get("id", ""))
+        kind = str((item or {}).get("kind", ""))
+        params = (item or {}).get("params") or {}
+        executor = EXECUTORS.get(kind)
+        if executor is None:
+            results.append({"id": action_id, "ok": False, "error": f"Unknown action: {kind}"})
+            continue
+        try:
+            detail = executor(store, params)
+        except HTTPException as exc:
+            results.append({"id": action_id, "ok": False, "error": str(exc.detail)})
+        except Exception as exc:  # noqa: BLE001 - one bad action must not 500 the batch
+            results.append({"id": action_id, "ok": False, "error": f"{type(exc).__name__}: {exc}"})
+        else:
+            results.append({"id": action_id, "ok": True, "kind": kind, "result": detail})
+
+    applied = sum(1 for r in results if r["ok"])
+    return {
+        "results": results,
+        "applied": applied,
+        "message": "Applied {0} change{1}.".format(applied, "" if applied == 1 else "s"),
+    }
+
+
 @router.post("/agent/ask/sync")
 def ask_sync(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     """Non-streaming answer. The eval harness and tests use this."""
@@ -100,6 +230,7 @@ def ask_sync(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
         "declined": answer.declined,
         "uncited_figures": list(answer.audit.uncited) if answer.audit else [],
         "unknown_citation_ids": list(answer.audit.unknown_ids) if answer.audit else [],
+        "actions": answer.actions,
         "error": answer.error,
     }
 

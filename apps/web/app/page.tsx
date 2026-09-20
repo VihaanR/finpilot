@@ -9,6 +9,8 @@ import { LeakGauge } from "@/components/dashboard/LeakGauge";
 import { CategoryChart } from "@/components/dashboard/CategoryChart";
 import { TrendChart } from "@/components/dashboard/TrendChart";
 import { AnomalyCards } from "@/components/dashboard/AnomalyCards";
+import { AgentPanel } from "@/components/dashboard/AgentPanel";
+import { GuardCard } from "@/components/dashboard/GuardCard";
 import { CitationChip } from "@/components/citations/CitationChip";
 import { useApi } from "@/lib/useApi";
 import { formatDate, formatMonth } from "@/lib/format";
@@ -31,6 +33,11 @@ export default function DashboardPage() {
           of them opens to the transactions underneath it.
         </p>
       </div>
+
+      {/* First thing on the page, and the only one that can change anything.
+          Deliberately not autofocused: the skip link must stay the first
+          focusable element on every route (tests/a11y.spec.ts). */}
+      <AgentPanel onApplied={reload} />
 
       {loading && !data ? <LoadingPanel label="Loading your ledger…" /> : null}
       {error ? <ErrorPanel message={error} /> : null}
@@ -80,6 +87,8 @@ export default function DashboardPage() {
 
             <div className="space-y-6">
               <LeakGauge leak={data.leak_score} />
+
+              <GuardCard />
 
               <GlassPanel className="p-6">
                 <SectionHeading>Accounts</SectionHeading>

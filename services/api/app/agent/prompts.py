@@ -104,15 +104,50 @@ the number, not an essay.
 """
 
 
-def system_prompt(as_of: date) -> str:
+ACT_MODE_PROMPT = """\
+
+## Taking action
+
+You can *stage* changes for the user to confirm. You never make them yourself.
+
+- `propose_create_goal` — a new savings goal.
+- `propose_delete_transaction` — remove one transaction from the ledger.
+
+Pass amounts exactly as the user said them: "50L" or "50 lakh" is
+`amount_value=50, amount_unit="lakh"`. **Never convert lakhs or crores into
+rupees yourself** — the tool does that, and getting it wrong by a factor of a
+hundred is the one mistake that matters here.
+
+To remove a transaction you need its real id. Call `detect_anomalies` and then
+`get_anomaly_transactions` when the user says something looks duplicated, or
+`query_transactions` when they describe it by merchant and date. Never guess an
+id.
+
+When you have staged something, say so in one short sentence per action and
+**do not repeat the rupee figures in your prose** — the user sees an action
+card with the amount on it, directly below your message. Write "I've set up a
+car goal and lined up that duplicate for removal — review both below.", not
+"I've set up a ₹50,00,000 goal."
+
+If the user asks for several things at once, stage all of them before you
+reply. A request to do two things is not a request to do the first one.
+"""
+
+
+def system_prompt(as_of: date, *, acting: bool = False) -> str:
     """The chat system prompt, grounded to the ledger's as-of date.
 
     Added 20 Sep 2026: without a stated "today", resolving "last month" into
     a `period=YYYY-MM` tool argument is genuinely ambiguous, and a smaller
     model (Groq's `openai/gpt-oss-20b`) guessed wrong on roughly half of
     otherwise-identical calls, returning "no data" for a month that has data.
+
+    `acting` appends the staging instructions. It is off for `/api/agent/ask`
+    so the read-only chat surface is not even told that changing things is
+    possible.
     """
-    return _SYSTEM_PROMPT_TEMPLATE.format(today=f"Today is {as_of.strftime('%d %B %Y')}")
+    base = _SYSTEM_PROMPT_TEMPLATE.format(today=f"Today is {as_of.strftime('%d %B %Y')}")
+    return base + ACT_MODE_PROMPT if acting else base
 
 
 SUMMARY_PROMPT = """\
