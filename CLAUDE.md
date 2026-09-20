@@ -52,7 +52,7 @@ writes prose around figures the engine produced.
 - `services/api/app/{ingest,enrich,agent,privacy}/` — scaffolded, not yet built.
 - `apps/web/` — Next.js 15 App Router, Tailwind v4, Recharts.
 - Runtime inference is split across two free tiers, never Anthropic:
-  **Groq** (`llama-3.3-70b-versatile`) for chat and the monthly summary —
+  **Groq** (`llama-3.1-8b-instant`) for chat and the monthly summary —
   switched 20 Sep 2026 off Gemini after its 20-requests/day cap ran out
   mid-demo-prep; **Google Gemini** (`gemini-3.5-flash-lite`) still does bulk
   classification, vision, and `gemini-embedding-2` at 768 dims. Model IDs
