@@ -132,8 +132,17 @@ export default function ChatPage() {
         </GlassPanel>
       )}
 
+      {/*
+        `role="log"` rather than a bare div: a plain div has no role, and
+        `aria-label` on a roleless element is prohibited (axe:
+        aria-prohibited-attr). `log` is also the correct semantic for a
+        transcript that grows at the end, and it carries an implicit
+        aria-live="polite" — kept explicit here so the intent survives a
+        future refactor.
+      */}
       <div
         ref={liveRef}
+        role="log"
         aria-live="polite"
         aria-busy={busy}
         aria-label="Conversation"

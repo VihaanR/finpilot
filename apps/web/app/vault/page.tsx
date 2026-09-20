@@ -196,11 +196,13 @@ export default function VaultPage() {
                   <li key={d.id} className="border-b border-[var(--border)] pb-2">
                     <span className="text-[var(--fg)]">{d.purpose}</span>{" "}
                     <span className="text-[var(--fg-subtle)]">
-                      · {d.model} · {formatDate(d.created_at.slice(0, 10))} ·{" "}
-                      {d.txn_count} transactions
+                      · {d.provider} · {d.model} ·{" "}
+                      {formatDate(d.created_at.slice(0, 10))}
                     </span>
                     <span className="block text-xs text-[var(--fg-muted)]">
-                      Fields sent: {d.fields.join(", ")}
+                      {d.field_types.length > 0
+                        ? `Redacted before sending: ${d.field_types.join(", ")} (${d.redacted_count} value${d.redacted_count === 1 ? "" : "s"})`
+                        : "Nothing identifying was present to redact."}
                     </span>
                   </li>
                 ))}

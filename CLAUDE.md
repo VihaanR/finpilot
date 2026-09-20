@@ -12,12 +12,23 @@ Windows paths. The venv interpreter is `Scripts/python.exe`, not `bin/python`.
 # Engine + seed tests (200 currently). Run from the repo root.
 services/api/.venv/Scripts/python.exe -m pytest services/api/tests/
 
-# API on :8000 — GET /health must return {"status":"ok"}
-cd services/api && .venv/Scripts/python.exe -m uvicorn app.main:app --reload
+# API — GET /health must return {"status":"ok"}
+# NOTE: :8000 is inside this machine's Windows reserved port exclusion range
+# (netsh int ipv4 show excludedportrange protocol=tcp) and CANNOT bind — the
+# error is a misleading "socket access forbidden", not "in use". Use 8001 and
+# rebuild the web app with a matching NEXT_PUBLIC_API_URL, since Next bakes it
+# in at build time.
+cd services/api && .venv/Scripts/python.exe -m uvicorn app.main:app --port 8001
 
 # Web on :3000
 cd apps/web && npm run dev
 cd apps/web && npm run build     # must exit 0 with no type errors
+
+# Accessibility sweep: every route x both themes, zero axe violations.
+# Needs the API live; Playwright starts the web server itself.
+cd apps/web && NEXT_PUBLIC_API_URL=http://localhost:8001 npx playwright test
+cd apps/web && npx playwright test --grep-invert @quota   # skip the one
+                                   # spec that spends Gemini quota
 
 # Regenerate the demo dataset (pin --as-of, see gotchas)
 services/api/.venv/Scripts/python.exe seed/generate.py --seed 42 --as-of 2026-09-19
@@ -102,5 +113,14 @@ file describes structure, not the day's state.
   needing sustained volume — the T15 eval harness at 25 questions — needs
   billing. `agent/loop.py` deliberately does **not** retry 429: on a daily cap
   each retry spends another request to be told the same thing.
+- **Hand-written types in `apps/web/lib/types.ts` are not checked against the
+  API.** They are mirrors, maintained by hand, and TypeScript will happily
+  verify a page against a shape the server has never sent. The vault page
+  declared `fields`/`txn_count` where `/api/vault` returns
+  `field_types`/`redacted_count`; it type-checked, built, and threw a
+  client-side exception that blanked the whole page the moment the AI
+  disclosure log had one row in it. When you change a route's payload, grep
+  `lib/types.ts` for the shape and run the Playwright suite — `npm run build`
+  cannot catch this class of bug.
 - **`seed/output/` is gitignored; `seed/expected.json` is committed.** The eval
   harness reads the latter, so regenerating the seed can dirty the tree.

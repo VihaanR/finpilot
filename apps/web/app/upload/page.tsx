@@ -5,6 +5,7 @@ import Link from "next/link";
 import { GlassPanel, SectionHeading } from "@/components/ui/Glass";
 import { Button } from "@/components/ui/Button";
 import { API_BASE, api } from "@/lib/api";
+import { streamSse } from "@/lib/sse";
 import { cn } from "@/lib/cn";
 
 interface BankHint {
@@ -87,37 +88,15 @@ export default function UploadPage() {
       ]);
 
       try {
-        const response = await fetch(API_BASE + "/api/ingest", {
+        // Shares one SSE reader with chat. The hand-rolled parser this
+        // replaced split frames on a bare blank line, but sse_starlette
+        // separates them with CRLF — so it matched nothing and rendered no
+        // progress at all, while the upload itself succeeded and looked fine.
+        for await (const frame of streamSse(API_BASE + "/api/ingest", {
           method: "POST",
           body: form,
-        });
-        if (!response.ok || !response.body) {
-          throw new Error(`Upload failed (${response.status}).`);
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-
-          const frames = buffer.split("\n\n");
-          buffer = frames.pop() ?? "";
-          for (const frame of frames) {
-            const line = frame
-              .split("\n")
-              .find((l) => l.startsWith("data:"));
-            if (!line) continue;
-            try {
-              const payload = JSON.parse(line.slice(5).trim()) as IngestEvent;
-              setEvents((prev) => [...prev, payload]);
-            } catch {
-              // A partial frame; the next read will complete it.
-            }
-          }
+        })) {
+          setEvents((prev) => [...prev, frame.data as IngestEvent]);
         }
       } catch (e) {
         setEvents((prev) => [

@@ -16,7 +16,12 @@ export async function* streamSse(
 ): AsyncGenerator<SseFrame> {
   const response = await fetch(url, {
     ...init,
-    headers: { "content-type": "application/json", ...init.headers },
+    headers: {
+      // FormData must set its own multipart boundary; forcing JSON here
+      // would make the server reject the upload.
+      ...(init.body instanceof FormData ? {} : { "content-type": "application/json" }),
+      ...init.headers,
+    },
   });
 
   if (!response.ok || !response.body) {
@@ -36,7 +41,12 @@ export async function* streamSse(
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+    // Normalise CRLF first. sse_starlette's DEFAULT_SEPARATOR is "\r\n", so
+    // frames arrive separated by "\r\n\r\n" — splitting on "\n\n" matches
+    // nothing at all and silently yields zero events while the request looks
+    // perfectly healthy (200, body streaming, no error anywhere). The spec
+    // allows CR, LF or CRLF, so the only safe reader normalises.
+    buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
 
     // Frames are separated by a blank line. The tail is kept: it is either
     // empty or a partial frame the next read will complete.

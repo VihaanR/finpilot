@@ -262,13 +262,19 @@ export interface Vault {
   };
   consents: { version: string; scope: string; granted: boolean; changed_at: string }[];
   scopes: Record<string, boolean>;
+  // Mirrors what /api/vault actually returns. This block previously declared
+  // `fields` and `txn_count`, which the server has never sent -- so the page
+  // type-checked against a shape that did not exist and threw the moment the
+  // log had a row in it. Keep these names in step with
+  // `Store.record_disclosure`.
   disclosures: {
     id: string;
     created_at: string;
     purpose: string;
     model: string;
-    fields: string[];
-    txn_count: number;
+    provider: string;
+    field_types: string[];
+    redacted_count: number;
   }[];
   storage_inventory: { table: string; rows: number; oldest?: string | null }[];
   retention_days: number;
